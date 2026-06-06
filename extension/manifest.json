@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "BOSS Chat Assistant",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "description": "Authorized BOSS job chat assistant backed by a local Python service.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://www.zhipin.com/*",
+    "https://www.bosszhipin.com/*",
+    "http://127.0.0.1:8788/*",
+    "http://localhost:8788/*"
+  ],
+  "action": {
+    "default_title": "BOSS Assistant",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.zhipin.com/*", "https://www.bosszhipin.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

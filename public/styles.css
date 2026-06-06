@@ -1,0 +1,447 @@
+:root {
+  color-scheme: light;
+  --bg: #eef2f4;
+  --surface: #ffffff;
+  --text: #15191d;
+  --muted: #63707c;
+  --line: #d9e0e5;
+  --accent: #0f8f8f;
+  --accent-dark: #0b6f73;
+  --danger: #b42318;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 72px;
+  padding: 14px 24px;
+  background: #152026;
+  color: #f7fafb;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 750;
+}
+
+h2 {
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.topbar p {
+  color: #b9c4cb;
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+}
+
+button:hover {
+  background: var(--accent-dark);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  background: #9aa7ad;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.4fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.panel {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.settings-panel,
+.table-panel,
+.automation-panel {
+  grid-column: 1 / -1;
+}
+
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+button.secondary {
+  background: #2f3a42;
+}
+
+button.secondary-btn {
+  background: #5a6470;
+  min-height: 36px;
+}
+
+button.secondary-btn:hover {
+  background: #3f4852;
+}
+
+.single-control {
+  gap: 14px;
+}
+
+#automation-toggle {
+  min-width: 160px;
+  min-height: 42px;
+  font-size: 15px;
+}
+
+#automation-toggle.is-running {
+  background: #b42318;
+}
+
+#automation-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.state-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.state-card {
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafb;
+}
+
+.state-card strong {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.state-card span {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+}
+
+.wide-state {
+  grid-column: span 3;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: var(--text);
+  background: #fff;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.wide {
+  grid-column: span 3;
+}
+
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.toggle-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  color: var(--text);
+}
+
+.toggle-row input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.upload-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.item {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.item strong {
+  font-size: 13px;
+}
+
+.item small {
+  color: var(--muted);
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.events {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.event {
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+/* ── Playwright progress & stats ─────────────── */
+
+button.primary-large {
+  min-width: 180px;
+  min-height: 44px;
+  font-size: 16px;
+  background: var(--accent);
+}
+
+button.primary-large:hover {
+  background: var(--accent-dark);
+}
+
+button.secondary-large {
+  min-height: 40px;
+  padding: 0 16px;
+  background: #5a6470;
+  font-size: 14px;
+}
+
+button.secondary-large:hover {
+  background: #3f4852;
+}
+
+.progress-bar-wrap {
+  margin: 14px 0 6px;
+}
+
+.progress-bar {
+  height: 10px;
+  background: #e2e7eb;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #17a2a4, #0f8f8f);
+  border-radius: 5px;
+  transition: width 0.5s ease;
+  font-size: 9px;
+  color: #fff;
+  text-align: center;
+  line-height: 10px;
+}
+
+.progress-text {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.progress-hint {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.progress-hint.danger {
+  color: var(--danger);
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.stat-card {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafb;
+  min-height: 58px;
+}
+
+.stat-card strong {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stat-card span {
+  display: block;
+  margin-top: 3px;
+  font-weight: 650;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .stats-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar,
+  .layout {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-panel,
+  .table-panel,
+  .automation-panel {
+    grid-column: auto;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wide {
+    grid-column: auto;
+  }
+
+  .state-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wide-state {
+    grid-column: auto;
+  }
+}

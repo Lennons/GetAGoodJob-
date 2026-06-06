@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>工作通 — BOSS Chat Assistant</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>工作通</h1>
+        <p id="health">连接中</p>
+      </div>
+      <div class="actions">
+        <button id="refresh">刷新</button>
+        <button id="save-settings">保存设置</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <!-- ══════ Playwright 自动投递总控 ══════ -->
+      <section class="panel automation-panel">
+        <h2>🚀 自动投递（Playwright 引擎）</h2>
+        <div class="mode-row" style="margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <span style="font-weight:600">投递来源：</span>
+          <label style="cursor:pointer"><input type="radio" name="pw-mode" value="recommend" /> 推荐</label>
+          <label style="cursor:pointer"><input type="radio" name="pw-mode" value="expected" checked /> 岗位推荐</label>
+          <label style="cursor:pointer"><input type="radio" name="pw-mode" value="search" /> 搜索框</label>
+          <input id="pw-search-keyword" type="text" placeholder="输入搜索关键词" style="display:none;width:220px;padding:6px 10px;border:1px solid #ccc;border-radius:6px" />
+        </div>
+        <div class="control-row single-control">
+          <button id="pw-launch" class="secondary-large">🔧 启动浏览器</button>
+          <button id="pw-start" class="primary-large">▶ 开始投递</button>
+          <button id="pw-stop" class="secondary-large">⏹ 停止</button>
+          <button id="pw-close-browser" class="secondary-large">❌ 关闭浏览器</button>
+        </div>
+        <div id="pw-progress" class="progress-bar-wrap" style="display:none">
+          <div class="progress-bar">
+            <div id="pw-progress-fill" class="progress-fill"></div>
+          </div>
+          <div id="pw-status-text" class="progress-text">就绪</div>
+        </div>
+        <div id="pw-stats" class="stats-row">
+          <div class="stat-card">
+            <strong>浏览器</strong>
+            <span id="pw-browser-status">未启动</span>
+          </div>
+          <div class="stat-card">
+            <strong>任务状态</strong>
+            <span id="pw-task-status">空闲</span>
+          </div>
+          <div class="stat-card">
+            <strong>已发送</strong>
+            <span id="pw-stat-sent">0</span>
+          </div>
+          <div class="stat-card">
+            <strong>已跳过</strong>
+            <span id="pw-stat-skipped">0</span>
+          </div>
+          <div class="stat-card">
+            <strong>错误</strong>
+            <span id="pw-stat-errors">0</span>
+          </div>
+          <div class="stat-card">
+            <strong>进度</strong>
+            <span id="pw-stat-total">0/0</span>
+          </div>
+        </div>
+        <div id="pw-message" class="progress-hint">点击"启动浏览器"后在BOSS页面登录，再点击"开始自动投递"。</div>
+      </section>
+
+      <!-- ══════ 设置 ══════ -->
+      <section class="panel settings-panel">
+        <h2>自动化设置</h2>
+        <div class="form-grid">
+          <label>DeepSeek Base URL <input id="api_base_url" type="url" /></label>
+          <label>模型
+            <select id="model">
+              <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+              <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+              <option value="deepseek-chat">deepseek-chat</option>
+            </select>
+          </label>
+          <label>每日开聊上限 <input id="daily_chat_limit" type="number" min="1" max="500" /></label>
+          <label>开聊分数线 <input id="min_score_to_chat" type="number" min="0" max="100" /></label>
+          <label>最小间隔(ms) <input id="cooldown_min_ms" type="number" min="3000" step="1000" /></label>
+          <label>最大间隔(ms) <input id="cooldown_max_ms" type="number" min="5000" step="1000" /></label>
+          <label>期望薪资 <input id="salary_expectation" type="text" /></label>
+          <label>投递城市 <input id="target_city" type="text" placeholder="重庆" /></label>
+          <label>岗位关键词 <input id="target_job_keyword" type="text" placeholder="产品经理" /></label>
+          <label class="wide">目标城市(多选) <input id="target_cities" type="text" /></label>
+          <label class="wide">目标岗位 <input id="target_roles" type="text" /></label>
+          <label class="wide">偏好关键词 <input id="preferred_keywords" type="text" /></label>
+          <label class="wide">屏蔽关键词 <input id="blocked_keywords" type="text" /></label>
+        </div>
+        <div class="toggle-row">
+          <label><input id="auto_send_initial" type="checkbox" /> 自动发送首句</label>
+          <label><input id="auto_reply" type="checkbox" /> 自动回复</label>
+          <label><input id="stop_on_risk_prompt" type="checkbox" /> 遇验证停止</label>
+          <label><input id="allow_contact_info_in_messages" type="checkbox" /> 允许联系方式</label>
+        </div>
+      </section>
+
+      <!-- ══════ 简历 ══════ -->
+      <section class="panel resume-panel">
+        <h2>简历</h2>
+        <form id="upload-form" class="upload-row">
+          <input id="resume-file" type="file" accept=".txt,.md,.pdf,.docx" />
+          <button type="submit">上传分析</button>
+        </form>
+        <textarea id="resume-text" rows="8" placeholder="粘贴简历文本"></textarea>
+        <div class="actions"><button id="analyze-text">分析文本</button></div>
+        <div id="resumes" class="list"></div>
+      </section>
+
+      <!-- ══════ 岗位 ══════ -->
+      <section class="panel table-panel">
+        <h2>岗位</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>分</th><th>状态</th><th>岗位</th><th>公司</th><th>跳过原因</th><th>首句</th></tr></thead>
+            <tbody id="jobs"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ══════ 事件 ══════ -->
+      <section class="panel events-panel">
+        <h2>事件</h2>
+        <div id="events" class="events"></div>
+      </section>
+    </main>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
