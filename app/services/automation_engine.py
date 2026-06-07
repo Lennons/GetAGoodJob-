@@ -209,6 +209,31 @@ SCROLL_JOB_LIST_JS = """
 })()
 """
 
+SEARCH_AND_SUBMIT_JS = """
+(() => {
+  const visible = (el) => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+  const keyword = "KEYWORD_PLACEHOLDER";
+  let input = document.querySelector('.c-search-input input, .job-search-form input, .expect-search-inner input[type="text"]');
+  if (!input || !visible(input)) {
+    input = Array.from(document.querySelectorAll('input[type="text"], input:not([type])')).find(
+      (el) => visible(el) && /搜索|职位|公司|岗位/.test(el.placeholder || '')
+    );
+  }
+  if (!input || !visible(input)) return { ok: false, reason: 'search_input_not_found', keyword };
+  input.focus();
+  input.value = '';
+  input.dispatchEvent(new Event('focus', { bubbles: true }));
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  if (setter && setter.set) { setter.set.call(input, keyword); }
+  else { input.value = keyword; }
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Unidentified', bubbles: true }));
+  input.focus();
+  return { ok: true, keyword, filled: true };
+})()
+"""
+
 def _target_list_state_js(label: str, keyword: str) -> str:
     label_json = json.dumps(label, ensure_ascii=False)
     keyword_json = json.dumps(keyword, ensure_ascii=False)
@@ -505,7 +530,7 @@ class AutomationEngine:
     @property
     def stats(self) -> dict: return dict(self._stats)
 
-    async def run(self, settings: dict, resume_analysis: dict, on_progress=None, already_sent: set = None, batch_id: str = "") -> dict:
+    async def run(self, settings: dict, resume_analysis: dict, on_progress=None, already_sent: set = None, batch_id: str = "", mode: str = "expected", search_keyword: str = "") -> dict:
         self._running = True
         self._stats = {"sent": 0, "skipped": 0, "errors": 0, "total": 0}
         self._chat_count = 0
@@ -518,26 +543,42 @@ class AutomationEngine:
                 self._emit("error", "浏览器未运行", on_progress)
                 return self._result(False, "no_browser")
 
-            self._emit("selecting", f"定位岗位列表：{RECOMMENDED_JOB_TAB}", on_progress)
-            selected = await self._prepare_target_job_list(bm)
-            if not selected.get("ok"):
-                reason = (
-                    f"expectActive={selected.get('expectActive')}, "
-                    f"citySelected={selected.get('citySelected')}, "
-                    f"cityLabel={selected.get('cityLabel') or '-'}, "
-                    f"currentJobTab={selected.get('currentJobTab') or '-'}, "
-                    f"recommendActive={selected.get('recommendActive')}, "
-                    f"visibleExpectActive={selected.get('visibleExpectActive')}, "
-                    f"pageExpectId={selected.get('pageExpectId') or '-'}"
+            # 根据模式选择列表来源
+            if mode == "search":
+                self._emit("selecting", f"搜索岗位：{search_keyword}", on_progress)
+                selected = await self._prepare_search_list(bm, search_keyword)
+                if not selected.get("ok"):
+                    self._emit("error", f"搜索失败: {selected.get('reason', selected)}", on_progress)
+                    return self._result(False, "搜索失败")
+                self._emit("selecting", f"搜索结果：{selected.get('cardCount', 0)} 个岗位", on_progress)
+            elif mode == "recommend":
+                self._emit("selecting", "使用推荐页面", on_progress)
+                selected = await self._prepare_recommend_list(bm)
+                if not selected.get("ok"):
+                    self._emit("error", "推荐页面加载失败", on_progress)
+                    return self._result(False, "推荐页加载失败")
+                self._emit("selecting", f"推荐页面：{selected.get('cardCount', 0)} 个岗位", on_progress)
+            else:
+                self._emit("selecting", f"定位岗位列表：{RECOMMENDED_JOB_TAB}", on_progress)
+                selected = await self._prepare_target_job_list(bm)
+                if not selected.get("ok"):
+                    reason = (
+                        f"expectActive={selected.get('expectActive')}, "
+                        f"citySelected={selected.get('citySelected')}, "
+                        f"cityLabel={selected.get('cityLabel') or '-'}, "
+                        f"currentJobTab={selected.get('currentJobTab') or '-'}, "
+                        f"recommendActive={selected.get('recommendActive')}, "
+                        f"visibleExpectActive={selected.get('visibleExpectActive')}, "
+                        f"pageExpectId={selected.get('pageExpectId') or '-'}"
+                    )
+                    message = f"未能真正切到 {RECOMMENDED_JOB_TAB}，已停止，避免在推荐页投递（{reason}）"
+                    self._emit("error", message, on_progress)
+                    return self._result(False, message)
+                self._emit(
+                    "selecting",
+                    f"已锁定 {RECOMMENDED_JOB_TAB}，可见岗位 {selected.get('cardCount', 0)} 个",
+                    on_progress,
                 )
-                message = f"未能真正切到 {RECOMMENDED_JOB_TAB}，已停止，避免在推荐页投递（{reason}）"
-                self._emit("error", message, on_progress)
-                return self._result(False, message)
-            self._emit(
-                "selecting",
-                f"已锁定 {RECOMMENDED_JOB_TAB}，可见岗位 {selected.get('cardCount', 0)} 个",
-                on_progress,
-            )
             await asyncio.sleep(1)
 
             daily_limit = min(int(settings.get("daily_chat_limit", 50)), HARD_DAILY_LIMIT)
@@ -865,6 +906,40 @@ class AutomationEngine:
         except Exception:
             pass
         await asyncio.sleep(4)
+
+    def _search_job_list_js(self, keyword: str) -> str:
+        return SEARCH_AND_SUBMIT_JS.replace('"KEYWORD_PLACEHOLDER"', json.dumps(keyword, ensure_ascii=False))
+
+    async def _prepare_search_list(self, bm, keyword: str) -> dict:
+        """Fill search box + press Enter + wait for results."""
+        await bm.navigate(TARGET_JOBS_URL)
+        await asyncio.sleep(4)
+        result = await bm.evaluate(self._search_job_list_js(keyword))
+        if not (isinstance(result, dict) and result.get("ok")):
+            return {"ok": False, "reason": "search_input_failed", "detail": result}
+        await asyncio.sleep(0.5)
+        await bm.press_enter()
+        await asyncio.sleep(5)
+        for _ in range(10):
+            cards = await bm.evaluate("Array.from(document.querySelectorAll('.job-card-box')).filter(el => !!el.offsetParent).length")
+            if cards > 0: break
+            await asyncio.sleep(1)
+        cards = await bm.evaluate("Array.from(document.querySelectorAll('.job-card-box')).filter(el => !!el.offsetParent).length")
+        return {"ok": cards > 0, "cardCount": cards, "mode": "search"}
+
+    async def _prepare_recommend_list(self, bm) -> dict:
+        """Stay on recommend tab, ensure city is correct."""
+        await bm.navigate(TARGET_JOBS_URL)
+        await asyncio.sleep(4)
+        city_result = await self._select_target_city(bm)
+        await asyncio.sleep(3)
+        state = await self._target_list_state(bm)
+        state["city_selected"] = city_result
+        cards = await bm.evaluate("Array.from(document.querySelectorAll('.job-card-box')).filter(el => !!el.offsetParent).length")
+        state["cardCount"] = cards
+        if not state.get("ok"):
+            state["ok"] = cards > 0 and state.get("citySelected", False)
+        return state
 
     async def _prepare_target_job_list(self, bm) -> dict:
         await bm.navigate(TARGET_JOBS_URL)

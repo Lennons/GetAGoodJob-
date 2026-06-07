@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import quote
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -306,7 +306,7 @@ def _on_automation_progress(progress: dict):
     _automation_progress["stats"] = progress.get("stats", {})
 
 
-async def _run_automation_task(settings: dict, resume_analysis: dict):
+async def _run_automation_task(settings: dict, resume_analysis: dict, mode: str = "expected", search_keyword: str = ""):
     """后台运行自动化任务。"""
     _automation_progress["running"] = True
     _automation_progress["status"] = "starting"
@@ -343,6 +343,8 @@ async def _run_automation_task(settings: dict, resume_analysis: dict):
             on_progress=_on_automation_progress,
             already_sent=already_sent,
             batch_id=batch_id,
+            mode=mode,
+            search_keyword=search_keyword,
         )
         _automation_progress["message"] = result.get("message", "完成")
         _automation_progress["stats"] = result.get("stats", {})
@@ -358,10 +360,14 @@ async def _run_automation_task(settings: dict, resume_analysis: dict):
 async def start_playwright_automation(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    payload: dict[str, Any] = Body(default={}),
 ) -> dict[str, Any]:
     """启动 Playwright 驱动的全自动投递。"""
     if _automation_progress.get("running"):
         raise HTTPException(status_code=400, detail="自动化任务已在运行中")
+    
+    mode = payload.get("mode", "expected")
+    search_keyword = payload.get("search_keyword", "")
 
     resume = get_active_resume(db)
     if not resume.analysis:
@@ -384,11 +390,11 @@ async def start_playwright_automation(
         raise HTTPException(status_code=400, detail=f"今日开聊额度已用完：{used}/{limit}")
 
     # Record event
-    db.add(Event(type="automation_started", payload={"engine": "playwright"}))
+    db.add(Event(type="automation_started", payload={"engine": "playwright", "mode": mode, "search_keyword": search_keyword}))
     db.commit()
 
     # Start background task
-    background_tasks.add_task(_run_automation_task, settings, resume.analysis)
+    background_tasks.add_task(_run_automation_task, settings, resume.analysis, mode, search_keyword)
 
     return {
         "ok": True,
