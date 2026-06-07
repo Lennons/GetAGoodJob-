@@ -592,6 +592,7 @@ class AutomationEngine:
             cooldown_min = max(int(settings.get("cooldown_min_ms", 9000)), 5000)
             cooldown_max = max(int(settings.get("cooldown_max_ms", 18000)), cooldown_min + 5000)
             auto_send = bool(settings.get("auto_send_initial", True))
+            stop_on_risk = bool(settings.get("stop_on_risk_prompt", True))
 
             processed: set[str] = set()
             empty_rounds = 0
@@ -604,6 +605,9 @@ class AutomationEngine:
                 if "/web/geek/jobs" not in current_list_url:
                     await bm.navigate(TARGET_JOBS_URL)
                     await asyncio.sleep(2)
+                    if await self._check_page_risk(bm, stop_on_risk, on_progress):
+                        stop_all = True
+                        break
                 if self._chat_count >= daily_limit:
                     self._emit("paused", f"达上限 {daily_limit}", on_progress)
                     break
@@ -661,6 +665,17 @@ class AutomationEngine:
                     idx = self._stats["total"]
                     self._stats["total"] += 1
 
+                    if await self._check_page_risk(bm, stop_on_risk, on_progress):
+                        self._stats["errors"] += 1
+                        await self._record_job_result(
+                            job_card,
+                            {"score": 0, "decision": "skip", "status": "error",
+                             "reasons": ["检测到风控，停止处理"], "risks": ["风控中止"], "initial_message": ""},
+                            batch_id,
+                        )
+                        stop_all = True
+                        break
+
                     try:
                         msg = await self._process_one(
                             bm,
@@ -692,6 +707,11 @@ class AutomationEngine:
                         self._emit("running", f"[{idx+1}] 异常: {exc}", on_progress)
 
                     if not self._running:
+                        stop_all = True
+                        break
+
+                    if await self._check_page_risk(bm, stop_on_risk, on_progress):
+                        self._stats["errors"] += 1
                         stop_all = True
                         break
 
@@ -1040,6 +1060,20 @@ class AutomationEngine:
 
     def _result(self, ok, msg):
         return {"ok": ok, "message": msg, "stats": self._stats, "status": self._status}
+
+    async def _check_page_risk(self, bm, stop_on_risk: bool, on_progress=None) -> bool:
+        """Check current page for risk triggers. Returns True if should stop."""
+        if not stop_on_risk:
+            return False
+        try:
+            body_text = await bm.evaluate("document.body.innerText")
+            if isinstance(body_text, str) and RISK_PATTERNS.search(body_text):
+                match = RISK_PATTERNS.search(body_text).group(0)
+                self._emit("risk", f"检测到风控: {match}，停止自动化", on_progress)
+                return True
+        except Exception:
+            pass
+        return False
 
     def stop(self):
         self._running = False

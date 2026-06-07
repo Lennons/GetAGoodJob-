@@ -29,6 +29,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "daily_chat_limit": 50,
     "cooldown_min_ms": 9000,
     "cooldown_max_ms": 18000,
+    "reply_poll_seconds": 8,
     "min_score_to_chat": 55,
     "stop_on_risk_prompt": True,
     "allow_contact_info_in_messages": False,

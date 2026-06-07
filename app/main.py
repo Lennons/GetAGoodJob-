@@ -36,6 +36,8 @@ from app.services.automation import (
 )
 from app.services.automation_engine import AutomationEngine, get_engine
 from app.services.browser_manager import BrowserManager, ensure_browser, get_browser
+from app.services.reply_monitor import get_reply_monitor
+
 from app.services.deepseek import (
     analyze_resume,
     evaluate_job,
@@ -312,10 +314,18 @@ async def _run_automation_task(settings: dict, resume_analysis: dict, mode: str 
     _automation_progress["running"] = True
     _automation_progress["status"] = "starting"
     _automation_progress["message"] = "正在初始化..."
+    monitor_task = None
 
     try:
         # Ensure browser is running
         bm = await ensure_browser()
+
+        # Start reply monitor if auto-reply enabled
+        if settings.get("auto_reply"):
+            monitor = get_reply_monitor()
+            monitor_task = asyncio.create_task(
+                monitor.start(settings, resume_analysis)
+            )
 
         # NEVER navigate — use whatever page the user is currently on
         await asyncio.sleep(3)  # Brief wait for any in-flight page render
@@ -354,6 +364,12 @@ async def _run_automation_task(settings: dict, resume_analysis: dict, mode: str 
         _automation_progress["status"] = "error"
         _automation_progress["message"] = str(exc)
     finally:
+        if monitor_task and not monitor_task.done():
+            get_reply_monitor().stop()
+            try:
+                await asyncio.wait_for(monitor_task, timeout=5)
+            except asyncio.TimeoutError:
+                monitor_task.cancel()
         _automation_progress["running"] = False
 
 

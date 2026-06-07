@@ -9,7 +9,7 @@ const api = async (path, opts = {}) => {
 const $ = id => document.getElementById(id);
 const $$ = (sel, root) => (root || document).querySelectorAll(sel);
 
-const FIELDS = ["api_key","model","daily_chat_limit","cooldown_min_ms","cooldown_max_ms","min_score_to_chat","salary_expectation","target_job_keyword","target_cities","blocked_keywords","auto_send_initial","auto_reply","stop_on_risk_prompt","allow_contact_info_in_messages"];
+const FIELDS = ["api_key","model","daily_chat_limit","cooldown_min_ms","cooldown_max_ms","reply_poll_seconds","min_score_to_chat","target_job_keyword","target_cities","blocked_keywords","auto_send_initial","auto_reply","stop_on_risk_prompt","allow_contact_info_in_messages"];
 function splitList(v) { return String(v||"").split(/[,，\n]/).map(s=>s.trim()).filter(Boolean); }
 function joinList(v) { return Array.isArray(v)?v.join("，"):v||""; }
 
@@ -82,7 +82,7 @@ async function saveSettings() {
   for (const k of FIELDS) { const el = $(k); if (!el) continue;
     if (el.type === "checkbox") p[k] = el.checked;
     else if (["target_cities","blocked_keywords"].includes(k)) p[k] = splitList(el.value);
-    else if (["daily_chat_limit","cooldown_min_ms","cooldown_max_ms","min_score_to_chat"].includes(k)) p[k] = Number(el.value || 0);
+    else if (["daily_chat_limit","cooldown_min_ms","cooldown_max_ms","reply_poll_seconds","min_score_to_chat"].includes(k)) p[k] = Number(el.value || 0);
     else p[k] = el.value;
   }
   await api("/api/settings", { method: "PATCH", body: JSON.stringify(p) });

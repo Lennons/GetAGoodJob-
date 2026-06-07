@@ -7,7 +7,7 @@
 <!-- ══════ Sidebar ══════ -->
 <aside class="sidebar">
   <div class="sidebar-brand"><h1>工作通</h1><span>BOSS Chat Assistant</span></div>
-  <div class="sidebar-badge">v1.0.1 已实现</div>
+  <div class="sidebar-badge">v1.0.5 已实现</div>
   <nav class="sidebar-nav">
     <button class="nav-item active" data-page="dashboard"><span class="nav-dot"></span>自动投递</button>
     <button class="nav-item" data-page="settings"><span class="nav-dot"></span>设置中心</button>
@@ -122,9 +122,9 @@
           <div class="field"><span class="field-label">模型</span><select id="model" class="field-select"><option value="deepseek-v4-flash">deepseek-v4-flash</option><option value="deepseek-v4-pro">deepseek-v4-pro</option><option value="deepseek-chat">deepseek-chat</option></select></div>
           <div class="field"><span class="field-label">每日沟通上限</span><input id="daily_chat_limit" class="field-input" type="number" min="1" max="500"/></div>
           <div class="field"><span class="field-label">最低开聊分数线</span><input id="min_score_to_chat" class="field-input" type="number" min="0" max="100"/></div>
-          <div class="field"><span class="field-label">期望薪资</span><input id="salary_expectation" class="field-input" type="text"/></div>
           <div class="field"><span class="field-label">最短发送间隔 (ms)</span><input id="cooldown_min_ms" class="field-input" type="number" min="3000" step="1000"/></div>
           <div class="field"><span class="field-label">最长发送间隔 (ms)</span><input id="cooldown_max_ms" class="field-input" type="number" min="5000" step="1000"/></div>
+          <div class="field"><span class="field-label">回复扫描间隔 (秒)</span><input id="reply_poll_seconds" class="field-input" type="number" min="3" max="120" step="1"/></div>
         </div>
       </div>
     </div>

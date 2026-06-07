@@ -298,7 +298,7 @@ async def generate_initial_message(resume: dict, job: dict, settings: dict) -> d
 
 
 async def generate_reply(resume: dict, job: Optional[dict], messages_in: list[dict], settings: dict) -> dict:
-    client = DeepSeekClient(base_url=settings.get("api_base_url"), model=settings.get("model"))
+    client = DeepSeekClient(api_key=settings.get("api_key"), model=settings.get("model"))
     if not client.configured:
         return {
             "action": "reply",

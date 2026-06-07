@@ -49,6 +49,7 @@ class SettingsPatch(BaseModel):
     daily_chat_limit: Optional[int] = None
     cooldown_min_ms: Optional[int] = None
     cooldown_max_ms: Optional[int] = None
+    reply_poll_seconds: Optional[int] = None
     min_score_to_chat: Optional[int] = None
     stop_on_risk_prompt: Optional[bool] = None
     allow_contact_info_in_messages: Optional[bool] = None
