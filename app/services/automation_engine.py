@@ -15,7 +15,14 @@ from app.services.browser_manager import get_browser
 
 RISK_PATTERNS = re.compile(
     r"(验证码|账号异常|请完成验证|滑块验证|行为验证|请稍后再试|"
-    r"今日沟通次数已达上限|操作太频繁)",
+    r"今日沟通次数已达上限|操作太频繁|"
+    r"请先登录|当前登录状态已失效|登录失效|登录状态失效|重新登录|登录过期|登录超时|"
+    r"请重新登录|身份过期|身份认证失败)",
+    re.IGNORECASE,
+)
+
+LOGIN_URL_PATTERNS = re.compile(
+    r"(/web/user/|/web/geek/login|/account/login|/login\b)",
     re.IGNORECASE,
 )
 
@@ -521,6 +528,7 @@ class AutomationEngine:
         self._chat_count = 0
         self._consecutive = 0
         self._session_start = 0.0
+        self._on_progress_cb = None
 
     @property
     def running(self) -> bool: return self._running
@@ -531,6 +539,7 @@ class AutomationEngine:
 
     async def run(self, settings: dict, resume_analysis: dict, on_progress=None, already_sent: set = None, batch_id: str = "", mode: str = "expected", search_keyword: str = "") -> dict:
         self._running = True
+        self._on_progress_cb = on_progress
         self._stats = {"sent": 0, "skipped": 0, "errors": 0, "total": 0}
         self._chat_count = 0
         self._consecutive = 0
@@ -599,6 +608,8 @@ class AutomationEngine:
             stop_all = False
             self._emit("extracting", "提取岗位列表...", on_progress)
 
+            self._start_login_watchdog(bm, on_progress)
+
             while self._running and not stop_all:
                 # Navigate back to list page for next batch (we may be on a detail/chat page)
                 current_list_url = await bm.current_url()
@@ -606,6 +617,9 @@ class AutomationEngine:
                     await bm.navigate(TARGET_JOBS_URL)
                     await asyncio.sleep(2)
                     if await self._check_page_risk(bm, stop_on_risk, on_progress):
+                        self._running = False
+                        self._status = "risk"
+                        self._emit("stopped", f"风控停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", on_progress)
                         stop_all = True
                         break
                 if self._chat_count >= daily_limit:
@@ -667,6 +681,9 @@ class AutomationEngine:
 
                     if await self._check_page_risk(bm, stop_on_risk, on_progress):
                         self._stats["errors"] += 1
+                        self._running = False
+                        self._status = "risk"
+                        self._emit("stopped", f"风控停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", on_progress)
                         await self._record_job_result(
                             job_card,
                             {"score": 0, "decision": "skip", "status": "error",
@@ -712,6 +729,9 @@ class AutomationEngine:
 
                     if await self._check_page_risk(bm, stop_on_risk, on_progress):
                         self._stats["errors"] += 1
+                        self._running = False
+                        self._status = "risk"
+                        self._emit("stopped", f"风控停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", on_progress)
                         stop_all = True
                         break
 
@@ -738,6 +758,13 @@ class AutomationEngine:
             return self._result(False, str(exc))
         finally:
             self._running = False
+            if self._login_watchdog_task and not self._login_watchdog_task.done():
+                self._login_watchdog_task.cancel()
+            # Safety net: final progress update for unexpected stop paths
+            if self._on_progress_cb and not (self._status or "").startswith("[completed]"):
+                self._emit(self._status.split("]")[0].lstrip("[") if "]" in (self._status or "") else "stopped",
+                           f"已停止 — 发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}",
+                           self._on_progress_cb)
 
     async def _record_job_result(self, job_info: dict, evaluation: dict, batch_id: str = "") -> bool:
         try:
@@ -809,8 +836,15 @@ class AutomationEngine:
         # Step 2: Open detail page in new tab
         detail_page = None
         try:
-            detail_page = await bm.open_tab(url)
-            await asyncio.sleep(5)
+            detail_page, is_login = await self._safe_open_tab(bm, url, on_progress)
+            if is_login:
+                return f"[{idx+1}] \u26a0\ufe0f 登录失效 | {title}"
+            if not detail_page:
+                eval_result = _mark_evaluation_skipped(eval_result, "打开标签页失败")
+                await self._record_job_result(job_card, eval_result, batch_id)
+                self._stats["skipped"] += 1
+                return f"[{idx+1}] 打开失败 | {title}"
+            await asyncio.sleep(2)
 
             # Verify on detail page
             verify = await bm.evaluate_on(detail_page, """(() => {
@@ -1075,8 +1109,67 @@ class AutomationEngine:
             pass
         return False
 
+    async def _safe_open_tab(self, bm, url: str, on_progress=None):
+        """Open new tab, immediately check if it redirects to login."""
+        try:
+            page = await bm.open_tab(url)
+            await asyncio.sleep(3)
+            page_url = await bm.evaluate_on(page, "location.href") or ""
+            if isinstance(page_url, str) and LOGIN_URL_PATTERNS.search(page_url):
+                self._emit("risk", "检测到登录失效，页面跳转至登录页，停止自动化", on_progress)
+                self._running = False
+                self._status = "risk"
+                if self._on_progress_cb:
+                    self._emit("stopped", f"登录失效停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", self._on_progress_cb)
+                try:
+                    await bm.close_tab(page)
+                except Exception:
+                    pass
+                return None, True
+            return page, False
+        except Exception:
+            return None, False
+
+    async def _check_all_pages_for_login(self, bm, on_progress=None) -> bool:
+        """Check ALL open browser tabs for login URLs via CDP HTTP API.
+        Does NOT depend on Playwright context — always works."""
+        try:
+            urls = bm.list_tab_urls()
+            for url in urls:
+                if isinstance(url, str) and LOGIN_URL_PATTERNS.search(url):
+                    self._emit("risk", f"检测到登录失效: {url[:80]}，停止自动化", on_progress)
+                    self._running = False
+                    self._status = "risk"
+                    if self._on_progress_cb:
+                        self._emit("stopped", f"登录失效停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", self._on_progress_cb)
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _start_login_watchdog(self, bm, on_progress=None):
+        """Spawn a background task that polls all tabs for login every 5 seconds."""
+        if self._login_watchdog_task and not self._login_watchdog_task.done():
+            return
+
+        async def _poll():
+            while self._running:
+                await asyncio.sleep(5)
+                try:
+                    if await self._check_all_pages_for_login(bm, on_progress):
+                        break
+                except Exception:
+                    pass
+
+        self._login_watchdog_task = asyncio.create_task(_poll())
+
     def stop(self):
+        was_running = self._running
         self._running = False
+        if self._login_watchdog_task and not self._login_watchdog_task.done():
+            self._login_watchdog_task.cancel()
+        if was_running and self._on_progress_cb:
+            self._emit("stopped", f"任务已停止 — 发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}", self._on_progress_cb)
 
 
 _engine: Optional[AutomationEngine] = None

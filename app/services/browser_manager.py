@@ -206,6 +206,45 @@ class BrowserManager:
         await self._ensure_page()
         await self._page.keyboard.press("Enter")
 
+    def pages(self) -> list:
+        """Return all open pages in the browser context.
+        Falls back to CDP HTTP API if Playwright context is unavailable."""
+        try:
+            if self._context:
+                return list(self._context.pages)
+        except Exception:
+            pass
+        # Fallback: query CDP HTTP API directly
+        try:
+            import urllib.request, json
+            resp = urllib.request.urlopen(
+                f"http://127.0.0.1:{CDP_PORT}/json", timeout=3
+            ).read()
+            tabs = json.loads(resp)
+            pages = []
+            for t in tabs:
+                if t.get("type") == "page":
+                    for p in (self._context.pages if self._context else []):
+                        if not p.is_closed() and p.url == t.get("url"):
+                            pages.append(p)
+                            break
+            return pages
+        except Exception:
+            pass
+        return []
+
+    def list_tab_urls(self) -> list[str]:
+        """Return URLs of all open tabs via CDP HTTP API (always works, no Playwright needed)."""
+        try:
+            import urllib.request, json
+            resp = urllib.request.urlopen(
+                f"http://127.0.0.1:{CDP_PORT}/json", timeout=3
+            ).read()
+            tabs = json.loads(resp)
+            return [t.get("url", "") for t in tabs if t.get("type") == "page"]
+        except Exception:
+            return []
+
     async def current_url(self) -> str:
         try:
             await self._ensure_page()
