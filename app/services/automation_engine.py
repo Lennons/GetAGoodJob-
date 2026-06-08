@@ -995,7 +995,7 @@ class AutomationEngine:
         """Stay on recommend tab, ensure city is correct."""
         await bm.navigate(TARGET_JOBS_URL)
         await asyncio.sleep(4)
-        city_result = await self._select_target_city(bm, settings.get("target_cities", [DEFAULT_CITY])[0])
+        city_result = await self._select_target_city(bm, DEFAULT_CITY)
         await asyncio.sleep(3)
         state = await self._target_list_state(bm)
         state["city_selected"] = city_result
@@ -1021,7 +1021,7 @@ class AutomationEngine:
                 await bm.navigate(TARGET_JOBS_URL)
                 await asyncio.sleep(3)
 
-            city_selected = await self._select_target_city(bm, settings.get("target_cities", [DEFAULT_CITY])[0])
+            city_selected = await self._select_target_city(bm, DEFAULT_CITY)
             await asyncio.sleep(4)
             state = await self._target_list_state(bm)
             state["selected"] = selected
