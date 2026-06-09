@@ -97,59 +97,76 @@ async function checkHealth() {
     const ok = h.browser_running;
     $("cdp-status").textContent = ok ? "9223 已连接" : "未连接";
     $("cdp-status").style.color = ok ? "#34D399" : "#94A3B8";
+    setBrowserBtn(ok);
   } catch(e) { $("cdp-status").textContent = "离线"; $("cdp-status").style.color = "#EF4444"; }
 }
 
-// ══════ Automation ═════════════════════════
-async function pwLaunch() {
-  const btn = $("pw-launch"); btn.disabled = true; btn.textContent = "启动中…";
-  try { await api("/api/setup/launch-browser", { method: "POST" }); $("progress-last").textContent = "浏览器已启动"; } catch(e) { $("progress-last").textContent = "启动失败：" + e.message; }
-  btn.disabled = false; btn.textContent = "启动浏览器"; await checkHealth();
-}
-async function pwStart() {
-  const mode = getMode(), keyword = getSearch();
-  try { await api("/api/automation/playwright/start", { method: "POST", body: JSON.stringify({ mode, search_keyword: keyword }) }); running = true; startPolling(); } catch(e) { $("progress-last").textContent = "启动失败：" + e.message; }
-}
-async function pwStop() { try { await api("/api/automation/playwright/stop", { method: "POST" }); stopRunning("手动停止"); } catch(e) {} }
-async function replyStart() {
-  const btn = $("pw-reply-start"); btn.disabled = true; btn.textContent = "启动中…";
-  try {
-    const r = await api("/api/reply-monitor/start", { method: "POST" });
-    if (r.ok) {
-      $("pw-reply-start").style.display = "none";
-      $("pw-reply-stop").style.display = "";
-      $("progress-last").textContent = "自动回复已开启 (" + (r.replied_count||0) + "条已回复)";
-    }
-  } catch(e) { $("progress-last").textContent = "启动失败：" + e.message; }
-  btn.disabled = false; btn.textContent = "开启自动回复";
-}
-async function replyStop() {
-  const btn = $("pw-reply-stop"); btn.disabled = true; btn.textContent = "停止中…";
-  try {
-    const r = await api("/api/reply-monitor/stop", { method: "POST" });
-    if (r.ok) {
-      $("pw-reply-start").style.display = "";
-      $("pw-reply-stop").style.display = "none";
-      $("progress-last").textContent = "自动回复已关闭 (" + (r.replied_count||0) + "条已回复)";
-    }
-  } catch(e) { $("progress-last").textContent = "停止失败：" + e.message; }
-  btn.disabled = false; btn.textContent = "关闭自动回复";
-}
-async function pwCloseBrowser() { try { await api("/api/setup/stop-browser", { method: "POST" }); await checkHealth(); } catch(e) {} }
+// ══════ Toggle Buttons ═════════════════════════
+let browserOn = false, autoOn = false, replyOn = false;
 
-function stopRunning(reason) {
-  running = false; if (timer) { clearInterval(timer); timer = null; }
-  $("progress-last").textContent = reason;
-  $("kpi-task").textContent = "就绪"; $("kpi-task").className = "kpi-value green";
-  $("progress-subtitle").textContent = reason;
+function setBrowserBtn(state, busy) {
+  browserOn = state;
+  const b = $("pw-browser");
+  if (busy) { b.disabled = true; b.textContent = busy; return; }
+  b.disabled = false; b.textContent = state ? "关闭浏览器" : "启动浏览器";
+  b.className = "btn " + (state ? "btn-danger" : "btn-primary");
 }
+function setAutoBtn(state, busy) {
+  autoOn = state;
+  const b = $("pw-auto");
+  if (busy) { b.disabled = true; b.textContent = busy; return; }
+  b.disabled = false; b.textContent = state ? "停止投递" : "开始投递";
+  b.className = "btn " + (state ? "btn-danger" : "btn-success");
+}
+function setReplyBtn(state, busy) {
+  replyOn = state;
+  const b = $("pw-reply");
+  if (busy) { b.disabled = true; b.textContent = busy; return; }
+  b.disabled = false; b.textContent = state ? "关闭自动回复" : "开启自动回复";
+  b.className = "btn " + (state ? "btn-ghost" : "btn-accent");
+}
+
+async function toggleBrowser() {
+  if (browserOn) {
+    setBrowserBtn(false, "关闭中…");
+    try { await api("/api/setup/stop-browser", { method: "POST" }); setBrowserBtn(false); } catch(e) { setBrowserBtn(true); $("progress-last").textContent = "关闭失败：" + e.message; }
+    await checkHealth();
+  } else {
+    setBrowserBtn(false, "启动中…");
+    try { await api("/api/setup/launch-browser", { method: "POST" }); setBrowserBtn(true); $("progress-last").textContent = "浏览器已启动"; } catch(e) { setBrowserBtn(false); $("progress-last").textContent = "启动失败：" + e.message; }
+    await checkHealth();
+  }
+}
+async function toggleAuto() {
+  if (autoOn) {
+    setAutoBtn(false, "停止中…");
+    try { await api("/api/automation/playwright/stop", { method: "POST" }); setAutoBtn(false); running = false; if (timer) { clearInterval(timer); timer = null; } $("kpi-task").textContent = "就绪"; $("kpi-task").className = "kpi-value green"; $("progress-subtitle").textContent = "已停止"; startPolling(); } catch(e) { setAutoBtn(true); $("progress-last").textContent = "停止失败：" + e.message; }
+  } else {
+    setAutoBtn(false, "启动中…");
+    const mode = getMode(), keyword = getSearch();
+    try { await api("/api/automation/playwright/start", { method: "POST", body: JSON.stringify({ mode, search_keyword: keyword }) }); setAutoBtn(true); running = true; startPolling(); } catch(e) { setAutoBtn(false); $("progress-last").textContent = "启动失败：" + e.message; }
+  }
+}
+async function toggleReply() {
+  if (replyOn) {
+    setReplyBtn(false, "关闭中…");
+    try { const r = await api("/api/reply-monitor/stop", { method: "POST" }); setReplyBtn(false); $("progress-last").textContent = "自动回复已关闭"; } catch(e) { setReplyBtn(true); $("progress-last").textContent = "关闭失败：" + e.message; }
+  } else {
+    setReplyBtn(false, "启动中…");
+    try { const r = await api("/api/reply-monitor/start", { method: "POST" }); setReplyBtn(true); $("progress-last").textContent = "自动回复已开启"; } catch(e) { setReplyBtn(false); $("progress-last").textContent = "启动失败：" + e.message; }
+  }
+}
+
 function startPolling() { if (timer) clearInterval(timer); timer = setInterval(pollAutomation, 1500); pollAutomation(); }
 async function pollAutomation() {
   try {
     const d = await api("/api/automation/poll", { method: "POST", body: JSON.stringify({status:"online",running}) });
     if (d.batch_id && d.batch_id !== batchId) { batchId = d.batch_id; lastVer = ""; await loadJobs(); }
+
+    if (d.running !== autoOn) setAutoBtn(d.running);
     if (d.running && !running) { running = true; startPolling(); }
-    if (!d.running && running) { stopRunning(d.status === "completed" ? "完成" : "已停止"); await loadJobs(); }
+    if (!d.running && running) { running = false; $("kpi-task").textContent = "就绪"; $("kpi-task").className = "kpi-value green"; $("progress-subtitle").textContent = d.status === "completed" ? "完成" : "已停止"; await loadJobs(); }
+    setBrowserBtn(d.browser_running);
     $("progress-subtitle").textContent = d.message || "运行中…";
     $("progress-last").textContent = d.last_action || "";
     if (d.progress_pct != null) { $("pw-progress-fill").style.width = d.progress_pct + "%"; $("progress-pct").textContent = d.progress_pct + "%"; }
@@ -162,16 +179,7 @@ async function pollAutomation() {
     $("kpi-progress").textContent = (d.current||0) + "/" + (d.total||0);
     const pc = $("progress-counter"); if (pc) pc.textContent = (d.current||0) + " / " + (d.total||0);
     try { const q = await api("/api/automation/quota"); $("kpi-quota").textContent = `${q.used||0} / ${q.limit||0}`; } catch(e) {}
-    try {
-      const rp = await api("/api/reply-monitor/status");
-      if (rp.running) {
-        $("pw-reply-start").style.display = "none";
-        $("pw-reply-stop").style.display = "";
-      } else {
-        $("pw-reply-start").style.display = "";
-        $("pw-reply-stop").style.display = "none";
-      }
-    } catch(e) {}
+    try { const rp = await api("/api/reply-monitor/status"); setReplyBtn(rp.running); } catch(e) {}
     await checkVer();
   } catch(e) {}
 }
@@ -310,10 +318,9 @@ async function loadHotKeywords() {
 // ══════ Init ═══════════════════════════════
 async function init() { checkHealth(); loadSettings(); loadJobs(); }
 
-$("pw-launch").addEventListener("click", () => pwLaunch());
-$("pw-start").addEventListener("click", () => pwStart());
-$("pw-stop").addEventListener("click", () => pwStop());
-$("pw-close-browser").addEventListener("click", () => pwCloseBrowser());
+$("pw-browser").addEventListener("click", () => toggleBrowser());
+$("pw-auto").addEventListener("click", () => toggleAuto());
+$("pw-reply").addEventListener("click", () => toggleReply());
 $("save-settings").addEventListener("click", () => saveSettings());
 $("upload-form").addEventListener("submit", e => uploadResume(e));
 $("analyze-text").addEventListener("click", () => analyzeText());
