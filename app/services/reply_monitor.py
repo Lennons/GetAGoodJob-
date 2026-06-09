@@ -137,6 +137,25 @@ CLICK_RESUME_BTN_JS = """(() => {
 })()"""
 
 
+
+EXTRACT_COMPANY_TITLE_JS = """(() => {
+  const result = { company: "", title: "" };
+  const visible = el => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+  const els = Array.from(document.querySelectorAll('.name-text, .company-name, .job-name, .chat-top-name, [class*="name"], [class*="title"]'));
+  for (const el of els) {
+    if (!visible(el)) continue;
+    const t = (el.textContent || "").trim();
+    if (!t || t.length > 50) continue;
+    if (!result.company && (t.includes("公司") || t.includes("科技") || t.includes("集团") || t.length > 4)) result.company = t;
+    if (!result.title && (t.includes("经理") || t.includes("工程师") || t.includes("设计师") || t.includes("产品"))) result.title = t;
+  }
+  const linkEl = Array.from(document.querySelectorAll('a')).find(a => /job_detail/.test(a.href || ""));
+  if (linkEl) {
+    const linkText = (linkEl.textContent || "").trim();
+    if (linkText && linkText.length < 50 && linkText.length > 2) result.title = result.title || linkText;
+  }
+  return result;
+})()"""
 class ReplyMonitor:
 
     def __init__(self):
@@ -279,6 +298,18 @@ class ReplyMonitor:
         except Exception:
             return
 
+        # Extract company and job title from chat panel
+        company = chat_name
+        job_title = ""
+        try:
+            info = await bm.evaluate_on(chat_page, EXTRACT_COMPANY_TITLE_JS) or {}
+            if info.get("company"):
+                company = info["company"]
+            if info.get("title"):
+                job_title = info["title"]
+        except Exception:
+            pass
+
         # Read messages
         messages = await bm.evaluate_on(chat_page, READ_MESSAGES_JS) or []
         logger.info(f"Read {len(messages)} messages from {chat_name}")
@@ -357,6 +388,24 @@ class ReplyMonitor:
             })()""")
             await asyncio.sleep(2)
             logger.info(f"Reply sent to {chat_name}: {text[:60]}...")
+
+            # Log the reply
+            try:
+                log_data = json.dumps({
+                    "company": company,
+                    "title": job_title,
+                    "message": text[:500],
+                }).encode()
+                await asyncio.to_thread(lambda: __import__("urllib.request").request.urlopen(
+                    __import__("urllib.request").request.Request(
+                        "http://127.0.0.1:8788/api/reply-logs",
+                        data=log_data,
+                        headers={"Content-Type": "application/json"},
+                        method="POST"
+                    ), timeout=5
+                ).read())
+            except Exception as log_err:
+                logger.warning(f"Failed to log reply: {log_err}")
 
         # Return to chat list
         await self._return_to_list(bm, chat_page)

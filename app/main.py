@@ -596,6 +596,58 @@ async def reply_monitor_status():
     }
 
 
+# ── Reply Logs ────────────────────────────────────
+
+@app.post("/api/reply-logs")
+def create_reply_log(payload: dict[str, Any] = Body(...), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """记录一条自动回复。"""
+    from app.models import AutoReplyLog
+    log = AutoReplyLog(
+        company=payload.get("company", ""),
+        title=payload.get("title", ""),
+        message=payload.get("message", ""),
+        conversation_id=payload.get("conversation_id"),
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return {
+        "id": log.id,
+        "company": log.company,
+        "title": log.title,
+        "message": log.message,
+        "created_at": dt(log.created_at),
+    }
+
+
+@app.get("/api/reply-logs")
+def list_reply_logs(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """获取自动回复日志列表。"""
+    from app.models import AutoReplyLog
+    total = db.scalar(select(func.count(AutoReplyLog.id))) or 0
+    logs = db.scalars(
+        select(AutoReplyLog).order_by(desc(AutoReplyLog.id)).offset(offset).limit(min(limit, 200))
+    ).all()
+    items = [
+        {
+            "id": log.id,
+            "company": log.company,
+            "title": log.title,
+            "message": log.message,
+            "created_at": dt(log.created_at),
+        } for log in logs
+    ]
+    return {"total": total, "logs": items}
+
+
+@app.get("/api/reply-logs/count")
+def reply_logs_count(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """获取自动回复总数。"""
+    from app.models import AutoReplyLog
+    count = db.scalar(select(func.count(AutoReplyLog.id))) or 0
+    return {"total": count}
+
+
 # ── Settings ──────────────────────────────────────
 
 @app.get("/api/settings")

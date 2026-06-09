@@ -78,3 +78,11 @@ class AutomationPollIn(BaseModel):
     status: str = "online"
     running: bool = False
     queue_count: int = 0
+
+
+class AutoReplyLogOut(BaseModel):
+    id: int
+    company: str = ""
+    title: str = ""
+    message: str = ""
+    created_at: Optional[str] = None

@@ -144,7 +144,7 @@ async function toggleAuto() {
   } else {
     setAutoBtn(false, "启动中…");
     const mode = getMode(), keyword = getSearch();
-    try { await api("/api/automation/playwright/start", { method: "POST", body: JSON.stringify({ mode, search_keyword: keyword }) }); setAutoBtn(true); running = true; startPolling(); } catch(e) { setAutoBtn(false); $("progress-last").textContent = "启动失败：" + e.message; }
+    try { await api("/api/automation/playwright/start", { method: "POST", body: JSON.stringify({ mode, search_keyword: keyword }) }); setAutoBtn(true); running = true; $("kpi-task").textContent = "投递中"; $("kpi-task").className = "kpi-value green"; startPolling(); } catch(e) { setAutoBtn(false); $("progress-last").textContent = "启动失败：" + e.message; }
   }
 }
 async function toggleReply() {
@@ -164,6 +164,7 @@ async function pollAutomation() {
     if (d.batch_id && d.batch_id !== batchId) { batchId = d.batch_id; lastVer = ""; await loadJobs(); }
 
     if (d.running !== autoOn) setAutoBtn(d.running);
+    if (d.running) { $("kpi-task").textContent = "投递中"; $("kpi-task").className = "kpi-value green"; }
     if (d.running && !running) { running = true; startPolling(); }
     if (!d.running && running) { running = false; $("kpi-task").textContent = "就绪"; $("kpi-task").className = "kpi-value green"; $("progress-subtitle").textContent = d.status === "completed" ? "完成" : "已停止"; await loadJobs(); }
     setBrowserBtn(d.browser_running);
@@ -180,6 +181,7 @@ async function pollAutomation() {
     const pc = $("progress-counter"); if (pc) pc.textContent = (d.current||0) + " / " + (d.total||0);
     try { const q = await api("/api/automation/quota"); $("kpi-quota").textContent = `${q.used||0} / ${q.limit||0}`; } catch(e) {}
     try { const rp = await api("/api/reply-monitor/status"); setReplyBtn(rp.running); } catch(e) {}
+    try { const rl = await api("/api/reply-logs?limit=20"); $("kpi-replies").textContent = rl.total || 0; renderReplyLogs(rl.logs || []); } catch(e) {}
     await checkVer();
   } catch(e) {}
 }
@@ -220,6 +222,17 @@ async function loadJobs() {
   $("job-header-count").textContent = `共 ${jobTotal} 条记录`;
   updateJobPagination();
   $$("#jobs tr").forEach(tr => tr.addEventListener("click", () => { const j = currentJobData.find(x => x.seq === parseInt(tr.dataset.jobSeq)); if (j) openJobDrawer(j); }));
+}
+
+function renderReplyLogs(logs) {
+  const tbody = $("reply-logs");
+  if (!tbody) return;
+  const total = logs.length;
+  $("reply-header-count").textContent = "共 " + total + " 条记录";
+  tbody.innerHTML = logs.map((l, i) => {
+    const ts = l.created_at ? l.created_at.slice(0, 16).replace("T", " ") : "−";
+    return `<tr><td style="color:var(--text-secondary);font-size:12px;text-align:center">${l.id}</td><td style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${ts}</td><td>${l.company || "−"}</td><td>${l.title || "−"}</td><td style="font-size:12px;color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(l.message || "").slice(0, 80)}</td></tr>`;
+  }).join("");
 }
 
 async function checkVer() {
