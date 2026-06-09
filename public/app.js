@@ -160,7 +160,7 @@ async function toggleReply() {
 function startPolling() { if (timer) clearInterval(timer); timer = setInterval(pollAutomation, 1500); pollAutomation(); }
 async function pollAutomation() {
   try {
-    const d = await api("/api/automation/poll", { method: "POST", body: JSON.stringify({status:"online",running}) });
+    const d = await api("/api/automation/poll", { method: "POST" });
     if (d.batch_id && d.batch_id !== batchId) { batchId = d.batch_id; lastVer = ""; await loadJobs(); }
 
     if (d.running !== autoOn) setAutoBtn(d.running);

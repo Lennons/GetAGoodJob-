@@ -72,14 +72,6 @@ class EventIn(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class AutomationPollIn(BaseModel):
-    last_command_id: Optional[str] = None
-    url: str = ""
-    status: str = "online"
-    running: bool = False
-    queue_count: int = 0
-
-
 class AutoReplyLogOut(BaseModel):
     id: int
     company: str = ""

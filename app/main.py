@@ -21,18 +21,12 @@ from app.config import get_settings
 from app.database import get_db, init_db
 from app.models import Conversation, Event, Job, Resume, Setting
 from app.schemas import (
-    AutomationPollIn,
     EventIn,
     InitialMessageIn,
     JobEvaluationIn,
     ReplyIn,
     SettingsPatch,
     TextResumeIn,
-)
-from app.services.automation import (
-    get_automation_state,
-    issue_automation_command,
-    update_runner_status,
 )
 from app.services.automation_engine import AutomationEngine, get_engine
 from app.services.browser_manager import BrowserManager, ensure_browser, get_browser
@@ -53,8 +47,6 @@ from app.services.text import compact_text, normalize_source_key
 ROOT = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = ROOT / "uploads"
 PUBLIC_DIR = ROOT / "public"
-EXTENSION_DIR = ROOT / "extension"
-CHROME_PROFILE_DIR = Path.home() / ".boss-chat-assistant-chrome-profile"
 BOSS_JOBS_URL = "https://www.zhipin.com/web/geek/jobs?city=101040100"
 
 # ── App ────────────────────────────────────────────
@@ -264,7 +256,7 @@ async def launch_browser() -> dict[str, Any]:
         return {
             "ok": True,
             "url": bm.page_url or BOSS_JOBS_URL,
-            "profile_dir": str(CHROME_PROFILE_DIR),
+            "profile_dir": str(Path.home() / ".boss-chat-assistant-chrome-data"),
             "browser_running": True,
         }
     except ImportError as exc:
@@ -285,7 +277,7 @@ async def browser_status() -> dict[str, Any]:
     return {
         "running": True,
         "url": bm.page_url or "",
-        "profile_dir": str(CHROME_PROFILE_DIR),
+        "profile_dir": str(Path.home() / ".boss-chat-assistant-chrome-data"),
     }
 
 
@@ -441,31 +433,6 @@ def stop_playwright_automation() -> dict[str, Any]:
     _automation_progress["message"] = "已手动停止"
     return {"ok": True, "message": "已发送停止信号"}
 
-
-# ── Legacy automation endpoints (extension-based) ──
-
-@app.post("/api/setup/inject-runner")
-async def inject_browser_runner() -> dict[str, Any]:
-    """注入 content.js 到当前页面（兼容旧扩展模式）。"""
-    bm = BrowserManager.instance()
-    if not bm.running:
-        try:
-            bm = await ensure_browser()
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"浏览器未运行：{exc}")
-
-    content_js = EXTENSION_DIR / "content.js"
-    if not content_js.exists():
-        raise HTTPException(status_code=500, detail="content.js 不存在")
-
-    script = content_js.read_text(encoding="utf-8")
-    try:
-        result = await bm.evaluate(script)
-        return {"ok": True, "injected": {"result": result}}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"脚本注入失败：{exc}")
-
-
 @app.get("/api/automation/quota")
 def automation_quota(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = get_app_settings(db)
@@ -485,50 +452,15 @@ def automation_quota(db: Session = Depends(get_db)) -> dict[str, Any]:
         "remaining": max(limit - used, 0),
         "allowed": used < limit,
     }
-
-
-@app.get("/api/automation/state")
-def automation_state(db: Session = Depends(get_db)) -> dict[str, Any]:
-    return get_automation_state(db)
-
-
-@app.post("/api/automation/command/{action}")
-def automation_command(action: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    if action not in {"run", "sync", "start", "stop", "reply", "reset"}:
-        raise HTTPException(status_code=400, detail="不支持的自动化命令")
-    state = issue_automation_command(db, action)
-    db.add(
-        Event(
-            type="automation_command",
-            payload={"action": action, "command_id": state["command"]["id"]},
-        )
-    )
-    db.commit()
-    return state
-
-
 @app.post("/api/automation/poll")
-def automation_poll(payload: AutomationPollIn, db: Session = Depends(get_db)) -> dict[str, Any]:
-    state = update_runner_status(db, payload.model_dump())
-    command = state.get("command")
-    if command and command.get("created_at"):
-        created_at = datetime.fromisoformat(command["created_at"])
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-        if (datetime.now(timezone.utc) - created_at).total_seconds() > 300:
-            command = None
-    if command and command.get("id") == payload.last_command_id:
-        command = None
-
-    # Merge Playwright automation progress so frontend sees real-time stats
+def automation_poll() -> dict[str, Any]:
+    """返回 Playwright 自动化进度，供前端轮询。"""
     from app.services.browser_manager import get_browser
     bm = get_browser()
     engine = get_engine()
     stats = engine.stats or _automation_progress.get("stats", {})
 
     return {
-        "command": command,
-        # Fields frontend pollAutomation() expects
         "running": engine.running or _automation_progress.get("running", False),
         "status": engine.status or _automation_progress.get("status", "idle"),
         "message": _automation_progress.get("message", ""),
