@@ -138,6 +138,13 @@ class ReplyMonitor:
 
             while self._running:
                 try:
+                    # Reload the chat-list page so new unread items appear
+                    try:
+                        await page.reload(wait_until="domcontentloaded", timeout=15000)
+                        await asyncio.sleep(2)
+                    except Exception:
+                        pass
+
                     unread = await bm.evaluate_on(page, SCAN_CHAT_LIST_JS) or []
                     for chat in unread:
                         if not self._running:

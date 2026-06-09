@@ -557,11 +557,8 @@ class AutomationEngine:
         city = cities[0] if cities else "重庆"
         self._job_tab = f"{keyword}({city})"
         self._job_keyword = keyword
-        self._filter_city = filter_city
-        # Build dynamic URL with filter_city + keyword for direct navigation
         filter_city = settings.get("filter_city") or city
-        from urllib.parse import quote as _quote
-        self._jobs_url = f"https://www.zhipin.com/web/geek/jobs?city={_quote(filter_city)}&query={_quote(keyword)}"
+        self._filter_city = filter_city
 
         try:
             bm = get_browser()
@@ -616,8 +613,7 @@ class AutomationEngine:
                 # Navigate back to list page for next batch (we may be on a detail/chat page)
                 current_list_url = await bm.current_url()
                 if "/web/geek/jobs" not in current_list_url:
-                    from urllib.parse import quote as _quote2
-                    list_url = "https://www.zhipin.com/web/geek/jobs" if self._mode == "recommend" else f"https://www.zhipin.com/web/geek/jobs?query={_quote2(self._job_keyword)}"
+                    list_url = "https://www.zhipin.com/web/geek/jobs"
                     await bm.navigate(list_url)
                     await asyncio.sleep(2)
                     if await self._check_page_risk(bm, stop_on_risk, on_progress):
@@ -999,21 +995,26 @@ class AutomationEngine:
         return {"ok": cards > 0, "cardCount": cards, "url": await bm.current_url()}
 
     async def _prepare_target_job_list(self, bm) -> dict:
-        """Navigate to jobs page, select filter city, apply keyword via URL."""
+        """Navigate to jobs page, click expected job tab, select filter city."""
         await bm.navigate("https://www.zhipin.com/web/geek/jobs")
         await asyncio.sleep(4)
-        # Click the filter city in the UI
+        # Click the "expected job" filter tab (e.g., "产品经理(重庆)")
+        tab = await self._select_recommended_job_tab(bm, self._job_tab)
+        await asyncio.sleep(3)
+        if not tab.get("ok"):
+            # Tab click failed — try once more after city select
+            pass
+        # Click the filter city
         await self._select_target_city(bm, self._filter_city)
         await asyncio.sleep(3)
-        # Now navigate with keyword query to filter
-        from urllib.parse import quote as _quote
-        keyword_url = f"https://www.zhipin.com/web/geek/jobs?query={_quote(self._job_keyword)}"
-        await bm.navigate(keyword_url)
-        await asyncio.sleep(5)
+        # If tab failed first time, retry after city is set
+        if not tab.get("ok"):
+            tab = await self._select_recommended_job_tab(bm, self._job_tab)
+            await asyncio.sleep(3)
         cards = await bm.evaluate(
             "Array.from(document.querySelectorAll('.job-card-box, .job-card, .job-list-item, .recommend-job-card')).filter(el => !!el.offsetParent).length"
         )
-        return {"ok": cards > 0, "cardCount": cards, "url": await bm.current_url()}
+        return {"ok": cards > 0, "cardCount": cards, "tabOk": tab.get("ok"), "url": await bm.current_url()}
 
     async def _target_list_state(self, bm) -> dict:
         try:

@@ -75,7 +75,7 @@ async def analyze_resume(text: str, *, model: Optional[str] = None, api_key: Opt
 
 
 def _score_salary(job_salary: str, expected: str) -> int:
-    """Score salary match (0-15)."""
+    """Score salary match — returns negative penalty when gap >= 30% of expected."""
     if not expected or not job_salary:
         return 8  # no data, neutral
 
@@ -93,10 +93,9 @@ def _score_salary(job_salary: str, expected: str) -> int:
     # Overlap check
     if job_min <= exp_max and job_max >= exp_min:
         return 15
-    # Close: within 30% above or below
     gap = min(abs(job_min - exp_max), abs(job_max - exp_min))
-    if gap <= exp_min * 0.3:
-        return 10
+    if gap >= exp_min * 0.3:
+        return -100
     if gap <= exp_min * 0.5:
         return 5
     return 2
