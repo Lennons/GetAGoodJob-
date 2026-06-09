@@ -303,3 +303,54 @@
 2026-06-09 17:21:42,890 [INFO] Opening new chat page...
 2026-06-09 17:28:43,460 [INFO] --- New poll cycle ---
 2026-06-09 17:28:43,460 [INFO] Opening new chat page...
+2026-06-09 17:29:32,271 [INFO] --- New poll cycle ---
+2026-06-09 17:29:32,272 [INFO] Opening new chat page...
+2026-06-09 17:29:39,920 [INFO] Scan: 0 unread conversations
+2026-06-09 17:29:47,922 [INFO] --- New poll cycle ---
+2026-06-09 17:29:49,438 [INFO] Scan: 0 unread conversations
+2026-06-09 17:29:57,440 [INFO] --- New poll cycle ---
+2026-06-09 17:29:58,960 [INFO] Scan: 0 unread conversations
+2026-06-09 17:30:06,961 [INFO] --- New poll cycle ---
+2026-06-09 17:30:08,488 [INFO] Scan: 0 unread conversations
+2026-06-09 17:30:16,489 [INFO] --- New poll cycle ---
+2026-06-09 17:30:18,006 [INFO] Scan: 0 unread conversations
+2026-06-09 17:30:26,008 [INFO] --- New poll cycle ---
+2026-06-09 17:30:27,526 [INFO] Scan: 0 unread conversations
+2026-06-09 17:30:35,527 [INFO] --- New poll cycle ---
+2026-06-09 17:30:37,036 [INFO] Scan: 0 unread conversations
+2026-06-09 17:30:45,037 [INFO] --- New poll cycle ---
+2026-06-09 17:30:46,550 [INFO] Scan: 0 unread conversations
+2026-06-09 17:30:54,552 [INFO] --- New poll cycle ---
+2026-06-09 17:30:56,071 [INFO] Scan: 0 unread conversations
+2026-06-09 17:31:04,072 [INFO] --- New poll cycle ---
+2026-06-09 17:31:05,594 [INFO] Scan: 0 unread conversations
+2026-06-09 17:31:13,596 [INFO] --- New poll cycle ---
+2026-06-09 17:31:15,109 [INFO] Scan: 0 unread conversations
+2026-06-09 17:31:23,109 [INFO] --- New poll cycle ---
+2026-06-09 17:31:24,621 [INFO] Scan: 0 unread conversations
+2026-06-09 17:31:32,623 [INFO] --- New poll cycle ---
+2026-06-09 17:31:34,141 [INFO] Scan: 0 unread conversations
+2026-06-09 17:31:42,143 [INFO] --- New poll cycle ---
+2026-06-09 17:31:43,662 [INFO] Scan: 0 unread conversations
+2026-06-09 17:31:51,664 [INFO] --- New poll cycle ---
+2026-06-09 17:31:53,175 [INFO] Scan: 0 unread conversations
+2026-06-09 17:32:01,175 [INFO] --- New poll cycle ---
+2026-06-09 17:32:02,686 [INFO] Scan: 0 unread conversations
+2026-06-09 17:32:10,688 [INFO] --- New poll cycle ---
+2026-06-09 17:32:12,205 [INFO] Scan: 0 unread conversations
+2026-06-09 17:32:20,206 [INFO] --- New poll cycle ---
+2026-06-09 17:32:21,719 [INFO] Scan: 1 unread conversations
+2026-06-09 17:32:21,719 [INFO]   [0] 石阳霖 x1: 黄森泉，您好，看到您的经历介绍。我们提供日结薪资，无上限且月入过万，同时享有弹性工作制，时间灵活；此
+2026-06-09 17:32:21,719 [INFO] Opening: [0] 石阳霖
+2026-06-09 17:32:24,827 [INFO] Read 1 messages from 石阳霖
+2026-06-09 17:32:26,678 [INFO] AI: wait for 石阳霖
+2026-06-09 17:32:35,704 [INFO] --- New poll cycle ---
+2026-06-09 17:32:37,210 [INFO] Scan: 0 unread conversations
+2026-06-09 17:32:45,211 [INFO] --- New poll cycle ---
+2026-06-09 17:32:46,725 [INFO] Scan: 0 unread conversations
+2026-06-09 17:32:54,726 [INFO] --- New poll cycle ---
+2026-06-09 17:32:56,238 [INFO] Scan: 1 unread conversations
+2026-06-09 17:32:56,238 [INFO]   [0] 鲁怡 x2: 关注到贵司在重庆招聘web产品经理，我具备10年产品与技术复合背景，近期独立孵化AI Native产
+2026-06-09 17:32:56,238 [INFO] Opening: [0] 鲁怡
+2026-06-09 17:32:59,316 [INFO] Read 5 messages from 鲁怡
+2026-06-09 17:33:01,631 [INFO] Waiting 30s before replying (natural pacing)...

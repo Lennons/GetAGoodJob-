@@ -9,7 +9,7 @@ const api = async (path, opts = {}) => {
 const $ = id => document.getElementById(id);
 const $$ = (sel, root) => (root || document).querySelectorAll(sel);
 
-const FIELDS = ["api_key","model","daily_chat_limit","cooldown_min_ms","cooldown_max_ms","reply_poll_seconds","min_score_to_chat","target_job_keyword","target_cities","filter_city","blocked_keywords","auto_send_initial","auto_reply","stop_on_risk_prompt","deep_delivery","allow_contact_info_in_messages"];
+const FIELDS = ["api_key","model","daily_chat_limit","cooldown_min_ms","cooldown_max_ms","reply_poll_seconds","min_score_to_chat","target_job_keyword","target_cities","filter_city","blocked_keywords","auto_send_initial","stop_on_risk_prompt","deep_delivery","allow_contact_info_in_messages"];
 function splitList(v) { return String(v||"").split(/[,，\n]/).map(s=>s.trim()).filter(Boolean); }
 function joinList(v) { return Array.isArray(v)?v.join("，"):v||""; }
 
@@ -316,7 +316,10 @@ async function loadHotKeywords() {
 }
 
 // ══════ Init ═══════════════════════════════
-async function init() { checkHealth(); loadSettings(); loadJobs(); }
+async function init() { checkHealth(); loadSettings(); loadJobs(); loadVersion(); }
+async function loadVersion() {
+  try { const v = await api("/api/version"); $("app-version").textContent = "v" + (v.version || "?"); } catch(e) { $("app-version").textContent = ""; }
+}
 
 $("pw-browser").addEventListener("click", () => toggleBrowser());
 $("pw-auto").addEventListener("click", () => toggleAuto());
