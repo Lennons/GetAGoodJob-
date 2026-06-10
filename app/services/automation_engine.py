@@ -876,9 +876,14 @@ class AutomationEngine:
         try:
             eval_result = await evaluate_job(resume, job_card, settings)
         except Exception as e:
-            await self._record_skipped_job(job_card, f"AI评估异常: {e}", batch_id)
-            self._stats["skipped"] += 1
-            return f"[{idx+1}] 评估异常: {e}"
+            await self._record_job_result(job_card, {
+                "score": 0, "decision": "review",
+                "status": "error",
+                "reasons": [f"AI评估异常: {e}"],
+                "risks": [], "initial_message": "",
+            }, batch_id)
+            self._stats["errors"] += 1
+            return f"[{idx+1}] 评估异常(error): {e}"
         score = int(eval_result.get("score") or 0)
 
         if eval_result.get("decision") == "skip" or score < min_score:
