@@ -3,7 +3,7 @@ import { api } from "../api";
 import type { Resume, Settings as SettingsType } from "../types";
 
 const DEFAULT: SettingsType = {
-  api_key: "", model: "deepseek-chat", daily_chat_limit: 80,
+  api_key: "", model: "deepseek-v4-flash", daily_chat_limit: 80,
   cooldown_min_ms: 15000, cooldown_max_ms: 30000, reply_poll_seconds: 8,
   min_score_to_chat: 30, target_job_keyword: "产品经理",
   target_cities: "", filter_city: "重庆", blocked_keywords: "",
@@ -81,8 +81,8 @@ export default function SettingsPage() {
               <Field label="API Key"><input className="field-input" type="password" value={s.api_key} onChange={e => update("api_key", e.target.value)} /></Field>
               <Field label="模型">
                 <select className="field-select" value={s.model} onChange={e => update("model", e.target.value)}>
-                  <option value="deepseek-chat">deepseek-chat</option>
-                  <option value="deepseek-reasoner">deepseek-reasoner</option>
+                  <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+                  <option value="deepseek-v4-pro">deepseek-v4-pro</option>
                 </select>
               </Field>
               <Field label="每日沟通上限"><input className="field-input" type="number" min={1} max={500} value={s.daily_chat_limit} onChange={e => update("daily_chat_limit", Number(e.target.value))} /></Field>

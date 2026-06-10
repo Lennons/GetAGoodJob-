@@ -126,6 +126,37 @@ export default function Dashboard() {
     } catch {}
   }, [batchId, loadJobs, checkVer]);
 
+    // On mount: restore automation state from backend
+  useEffect(() => {
+    (async () => {
+      try {
+        const d = await api.pollAutomation({ status: "online", running: false });
+        if (d.running) {
+          runningRef.current = true;
+          if (pollTimer.current) clearInterval(pollTimer.current);
+          pollTimer.current = setInterval(pollAutomation, 1500);
+        }
+        if (d.browser_running != null) setBrowserRunning(!!d.browser_running);
+        if (d.message) setProgressMsg(String(d.message));
+        if (d.last_action) setLastAction(String(d.last_action));
+        if (d.progress_pct != null) { setPct(d.progress_pct + "%"); setBarW(Number(d.progress_pct)); }
+        if (d.eta) setEta(String(d.eta));
+        if (d.sent != null) setSent(Number(d.sent));
+        if (d.skipped != null) setSkipped(Number(d.skipped));
+        if (d.errors != null) setErrors(Number(d.errors));
+        if (d.current != null) setCurrent(Number(d.current));
+        if (d.total != null) { setTotal(Number(d.total)); setCounter(`${d.current} / ${d.total}`); }
+        const q = await api.getQuota();
+        setQuotaUsed(q.used || 0);
+        setQuotaLimit(q.limit || 0);
+        const rp = await api.replyStatus();
+        setReplyRunning(rp.running);
+        setReplyCount(rp.replied_count || 0);
+      } catch {}
+    })();
+  }, []);
+
+  // Reload data when filters/page change
   useEffect(() => {
     loadJobs();
     loadReplyLogs();
