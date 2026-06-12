@@ -35,7 +35,6 @@ LOGIN_PAGE_DETECT_JS = """(() => {
 
 
 HARD_DAILY_LIMIT = 80
-MAX_SESSION_SEC = 25 * 60
 LONG_BREAK_EVERY_N = 8
 LONG_BREAK_MIN_SEC = 45
 LONG_BREAK_MAX_SEC = 120
@@ -538,7 +537,6 @@ class AutomationEngine:
         self._stats: dict[str, int] = {"sent": 0, "skipped": 0, "errors": 0, "total": 0}
         self._chat_count = 0
         self._consecutive = 0
-        self._session_start = 0.0
         self._on_progress_cb = None
         self._login_watchdog_task = None
         self._mode = "expected"
@@ -564,7 +562,6 @@ class AutomationEngine:
         self._stats = {"sent": 0, "skipped": 0, "errors": 0, "total": 0}
         self._chat_count = 0
         self._consecutive = 0
-        self._session_start = time_module.time()
 
         # Compute job tab from settings
         keyword = settings.get("target_job_keyword", "产品经理")
@@ -722,9 +719,7 @@ class AutomationEngine:
                 if self._chat_count >= daily_limit:
                     self._emit("paused", f"达上限 {daily_limit}", on_progress)
                     break
-                if time_module.time() - self._session_start > MAX_SESSION_SEC:
-                    self._emit("paused", "超时会话限制", on_progress)
-                    break
+
 
                 jobs = await self._extract_jobs(bm)
                 fresh_jobs = []
@@ -768,10 +763,6 @@ class AutomationEngine:
                         break
                     if self._chat_count >= daily_limit:
                         self._emit("paused", f"达上限 {daily_limit}", on_progress)
-                        stop_all = True
-                        break
-                    if time_module.time() - self._session_start > MAX_SESSION_SEC:
-                        self._emit("paused", "超时会话限制", on_progress)
                         stop_all = True
                         break
 
@@ -849,8 +840,16 @@ class AutomationEngine:
                 self._emit("error", f"未找到新的可处理岗位。当前页面: {url}", on_progress)
                 return self._result(False, "no_jobs")
 
-            msg = f"完成 — 发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}"
-            self._emit("completed", msg, on_progress)
+            # 根据退出原因选择正确的结束状态
+            exit_reason = "empty"  # default: 岗位已穷尽
+            if self._chat_count >= daily_limit:
+                exit_reason = "daily_limit"
+            if exit_reason == "empty":
+                msg = f"完成 — 发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}"
+                self._emit("completed", msg, on_progress)
+            elif exit_reason == "daily_limit":
+                msg = f"达投递上限 {daily_limit} — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}"
+                self._emit("paused", msg, on_progress)
             return self._result(True, msg)
         except Exception as exc:
             self._emit("error", str(exc), on_progress)
@@ -1047,12 +1046,24 @@ class AutomationEngine:
                 await bm.evaluate_on(detail_page, _fill_only_js(message))
                 return f"[{idx+1}] \U0001f4dd 已填入 | {title}"
 
-            # Step 7: Fill and send
+            # Step 7: Type and send (逐字输入模拟)
             await self._random_delay(600, 1500)
-            await bm.evaluate_on(detail_page, _fill_only_js(message))
-            await asyncio.sleep(0.5)
-            await detail_page.bring_to_front()
+            # Focus and clear input
+            await bm.evaluate_on(detail_page, """(() => {
+              const cs = document.querySelectorAll('[class*="dialog"], [class*="chat"], body');
+              let input = null;
+              for (const c of cs) { if (!c.offsetParent) continue; input = c.querySelector('textarea, [contenteditable="true"], [role="textbox"]'); if (input && input.offsetParent) break; }
+              if (!input) return false;
+              input.focus(); input.click();
+              if (input.isContentEditable) input.textContent = '';
+              else { input.value = ''; input.dispatchEvent(new Event('input', {bubbles:true})); }
+              return true;
+            })()""")
             await asyncio.sleep(0.3)
+            await detail_page.bring_to_front()
+            await asyncio.sleep(0.2)
+            await detail_page.keyboard.type(message, delay=55)
+            await asyncio.sleep(0.4)
             await detail_page.keyboard.press("Enter")
             await asyncio.sleep(2)
 

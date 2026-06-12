@@ -485,42 +485,21 @@ async def generate_reply(resume: dict, job: Optional[dict], messages_in: list[di
     if not client.configured:
         return _fallback_generate_reply(messages_in, job_score)
 
-    # Pre-check: detect boss intent
+    # All intent analysis goes through AI — no keyword pre-checks
     last_boss_msgs = [m for m in messages_in[-6:] if m.get("role") == "boss"]
     boss_text = " ".join([(m.get("content", "") or "").lower() for m in last_boss_msgs]) if last_boss_msgs else ""
-
-    asks_resume = any(kw in boss_text for kw in ["简历", "附件", "发一份", "发下", "发一下", "看下简历", "看看简历", "发个简历", "resume", "cv"])
-    is_rejection = any(kw in boss_text for kw in ["不合适", "不考虑", "已招到", "不考虑了", "抱歉", "暂时不需要", "不太合适", "不匹配", "不符合", "暂停招聘", "停止招聘", "岗位已关闭", "已结束", "已满", "招到了", "满了", "暂时没有", "不适合", "经验不足", "期望不符"])
-
-    if asks_resume:
-        rule_extra = "action=send_resume, 生成一句简短得体的话术增加好感，表达简历已发送、期待后续沟通"
-    elif is_rejection and job_score >= 80:
-        rule_extra = (
-            f"action=rebuttal, 招聘方表达了拒绝，但该岗位评分高达{job_score}分，匹配度很高。"
-            "生成一段真诚得体的挽回话术（80-150字）："
-            "1. 先简短感谢对方的回复"
-            "2. 针对性强调1-2个与岗位高度匹配的亮点（技能/经验，不要编造）"
-            "3. 表达对该岗位/公司的认同和热情"
-            "4. 委婉请求再考虑一下，语气真诚不卑微"
-        )
-    else:
-        rule_extra = ""
 
     payload = {
         "resume_analysis": resume,
         "job": job or {},
         "conversation": messages_in[-12:],
         "job_score": job_score,
-        "asks_resume": asks_resume,
-        "is_rejection": is_rejection,
         "rules": {
             "do_not_fabricate": True,
             "do_not_share_contact_info_unless_allowed": not settings.get("allow_contact_info_in_messages", False),
             "if_uncertain_need_human": True,
         },
     }
-    if rule_extra:
-        payload["rules"]["special_action"] = rule_extra
 
     messages = [
         {
@@ -528,33 +507,26 @@ async def generate_reply(resume: dict, job: Optional[dict], messages_in: list[di
             "content": (
                 "你是求职沟通助手，帮助候选人与招聘方进行自然、有针对性的一对一沟通。只输出 JSON，不要 Markdown。\n\n"
                 "字段：action(reply|wait|decline|send_resume|rebuttal), message, need_human, reason。\n\n"
-                "=== 核心要求 ===\n"
-                "1. 仔细阅读 conversation 中招聘方最新说的话，理解对方的意图和问题\n"
-                "2. 判断对方意图属于哪一类，用对应方式回应：\n"
-                "   - 事实类问题（技术栈、经验、学历、离职原因、项目细节）→ 从简历找对应信息回答，不编造\n"
-                "   - 看法/想法类问题（怎么看某行业趋势、对岗位理解、为什么投我们）→ 用自己的专业理解正面回答，可结合简历中的行业/项目经验做论据，但不强搬简历内容\n"
-                "   - 闲聊/寒暄（打招呼、问在不在）→ 自然友好回应，不强行推销自己\n"
-                "   - 发待遇/薪资明细 → 简短确认收到，不评价高低\n"
-                "   - 索要简历/作品 → action=send_resume\n"
-                "   - 明确拒绝 → 视匹配度决定 rebuttal 或接受\n"
-                "3. 简历中有相关信息的善用，但不要每句话都扯到简历上；对方问看法时大胆表达自己的观点\n"
-                "4. 简历中没有的信息诚实说，不编造\n"
-                "5. 语气真诚自然，像真人在聊天，不死板不模板化\n"
-                "6. 不要以「您好，我叫XXX」格式开场\n\n"
-                "=== 行动决策 ===\n"
-                "- 招聘方索要简历/附件 → action=send_resume，message 先确认已发送简历，再自然争取面试机会（「简历中有相关项目经验，方便安排面试深入聊一下吗」），控制在 50-120 字，真诚不油滑\n"
-                "- 招聘方明确拒绝 → action可 rebuttal（若岗位匹配度高）或 decline\n"
-                "- 招聘方问了开放性问题/表达兴趣，且你能从简历中找到匹配点回应 → action=reply\n"
-                "- 系统消息/自动回复/竞争者分析 → action=wait（不需要回复）\n"
-                "- 招聘方发了待遇/薪资明细但未邀请面试 → action=reply，简短确认收到（\"好的收到，感谢详细介绍\"），不评价薪资高低，need_human=true\n"
-                "- 涉及入职时间、证件、隐私、线下面试冲突、收费等敏感内容 → need_human=true\n\n"
-                "=== 回复写法 ===\n"
-                "1. 先回应对对方的核心问题或表达（1句）\n"
-                "2. 事实类问题 → 用简历经验回答；看法类问题 → 用自己的专业判断回答；闲聊 → 自然接话即可\n"
-                "3. 最后自然地收尾，表达兴趣或期待（1句，但闲聊时可不加）\n"
-                "4. 不编造简历中没有的项目、技能、数据\n"
-                "5. message 控制在 50-150 字\n\n"
-                "如果 rules.special_action 有内容，按其要求执行。"
+                "=== 意图判断（由你全权决定 action） ===\n"
+                "1. 对方明确索要简历/作品/附件（如「发一份简历」「发下简历」「简历发我看下」）→ action=send_resume\n"
+                "2. 对方明确拒绝（「不合适」「不考虑」等）且 job_score >= 80 → action=rebuttal 挽回\n"
+                "3. 对方说「审核后联系你」「会把简历推荐给部门」「HR后续联系」「通过后通知你」等自己处理简历的话 → 不是索要简历！action=reply，简短感谢\n"
+                "4. 对方介绍薪资/工时/福利/公司背景/项目等 → action=reply，结合自己对行业和岗位的真实认知来回应\n"
+                "5. 对方问事实类问题 → action=reply，从 resume_analysis 找对应信息诚实回答\n"
+                "6. 对方问看法/想法类问题 → action=reply，用自己的专业判断回答\n"
+                "7. 闲聊/寒暄 → action=reply，自然友好\n"
+                "8. 系统消息/自动回复 → action=wait\n\n"
+                "=== 回复原则 ===\n"
+                "- 每个回复都要看对方说了什么，结合 context（简历、岗位、对话）给出有针对性的回答\n"
+                "- 介绍薪资待遇时 → 简短确认收到，可结合自己对市场行情的认知（「这个范围和市场水平差不多」「了解了，感谢具体介绍」），不评价高低\n"
+                "- 介绍公司背景时 → 如有了解可说一两句，没了解也可以说听起来不错\n"
+                "- 介绍上班时间时 → 简短确认，可以说「作息挺合理的」之类自然的评价\n"
+                "- 简历有的信息善用；简历没的信息诚实说不知道\n"
+                "- 语气真诚自然，像真人在聊天，不死板不模板化\n"
+                "- 不要以「您好，我叫XXX」开场\n"
+                "- message 控制在 30-120 字\n\n"
+                "=== 敏感内容 ===\n"
+                "涉及入职时间、证件、隐私、线下面试、收费等 → need_human=true"
             ),
         },
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -567,7 +539,12 @@ def _fallback_generate_reply(messages_in: list[dict], job_score: int = 0) -> dic
     last_boss_msgs = [m for m in messages_in[-6:] if m.get("role") == "boss"]
     boss_text = " ".join([(m.get("content", "") or "").lower() for m in last_boss_msgs]) if last_boss_msgs else ""
 
-    asks_resume = any(kw in boss_text for kw in ["简历", "附件", "发一份", "发下", "发一下", "看下简历", "看看简历", "发个简历", "resume", "cv"])
+    # Boss is asking for resume? Exclude cases where boss says they'll handle/forward it
+    asks_keywords = ["发一份", "发下简历", "发一下简历", "发个简历", "看下简历", "看看简历", "发我简历", "给个简历"]
+    asks_resume = any(kw in boss_text for kw in asks_keywords) or (
+        any(kw in boss_text for kw in ["简历", "附件", "resume", "cv"]) and
+        not any(kw in boss_text for kw in ["发您的", "把您的", "将简历", "把简历", "您的简历已", "审核通过", "收到您的简历", "已收到", "收到简历", "看过您的", "看了您的", "转发给", "推给", "推荐给", "发给", "提交给", "上传到"])
+    )
 
     if asks_resume:
         return {

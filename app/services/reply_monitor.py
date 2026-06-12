@@ -495,28 +495,25 @@ class ReplyMonitor:
             await asyncio.sleep(2)
 
         if text:
-            # Type reply into chat input and send
-            safe_text = json.dumps(text, ensure_ascii=False)
-            await bm.evaluate_on(chat_page, f"""((text) => {{
+            # Focus and clear the chat input
+            focused = await bm.evaluate_on(chat_page, """(() => {
               var input = document.querySelector('#chat-input') || document.querySelector('[contenteditable="true"]');
               if (!input) return false;
               input.focus();
               input.click();
-              if (input.isContentEditable) {{ input.textContent = ''; }} else {{ input.value = ''; }}
-              for (var i=0;i<text.length;i++) {{
-                if (input.isContentEditable) input.textContent += text[i];
-                else input.value += text[i];
-                input.dispatchEvent(new Event('input', {{bubbles:true}}));
-              }}
-              return true;
-            }})({safe_text})""")
-            await asyncio.sleep(0.5)
-            await bm.evaluate_on(chat_page, """(() => {
-              var input = document.querySelector('#chat-input') || document.querySelector('[contenteditable="true"]');
-              if (!input) return false;
-              input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', keyCode:13, bubbles:true, composed:true}));
+              if (input.isContentEditable) { input.textContent = ''; }
+              else { input.value = ''; input.dispatchEvent(new Event('input', {bubbles:true})); }
               return true;
             })()""")
+            if not focused:
+                logger.warning("Chat input not found")
+                await self._return_to_list(bm, chat_page)
+                return
+            await asyncio.sleep(0.3)
+            # Type character by character with realistic delays (same as human typing)
+            await chat_page.keyboard.type(text, delay=60)
+            await asyncio.sleep(0.4)
+            await chat_page.keyboard.press("Enter")
             await asyncio.sleep(2)
             logger.info(f"Reply sent to {chat_name}: {text[:60]}...")
 
