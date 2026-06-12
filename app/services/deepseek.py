@@ -39,9 +39,22 @@ class DeepSeekClient:
             "Content-Type": "application/json",
         }
         async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
-            response.raise_for_status()
-            body = response.json()
+            last_error = None
+            for retry in range(3):
+                try:
+                    response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+                    if response.status_code in (429, 502, 503, 504):
+                        await asyncio.sleep(2 * (retry + 1))
+                        continue
+                    response.raise_for_status()
+                    body = response.json()
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    if retry < 2:
+                        await asyncio.sleep(2 * (retry + 1))
+            else:
+                raise last_error or Exception("DeepSeek API 不可用")
 
         content = body["choices"][0]["message"]["content"]
         try:
@@ -90,15 +103,16 @@ def _score_salary(job_salary: str, expected: str) -> int:
     job_min = min(job_nums)
     job_max = max(job_nums)
 
-    # Overlap check
+    # 岗位最低薪资低于期望最低的70% → 直接跳过
+    if job_min < exp_min * 0.7:
+        return -100
+    # 有区间重叠 → 满分
     if job_min <= exp_max and job_max >= exp_min:
         return 15
-    gap = min(abs(job_min - exp_max), abs(job_max - exp_min))
-    if gap >= exp_min * 0.3:
-        return -100
-    if gap <= exp_min * 0.5:
+    # 岗位最低 ≥ 期望最低×0.7 但有差距 → 降分但不跳过
+    if job_min < exp_min:
         return 5
-    return 2
+    return 12
 
 
 def _apply_salary_penalty(evaluation: dict, job: dict, settings: dict) -> dict:

@@ -41,7 +41,7 @@ LONG_BREAK_MAX_SEC = 120
 TARGET_JOBS_URL = "https://www.zhipin.com/web/geek/jobs?city=101040100"
 TARGET_JOB_KEYWORD = "产品经理"
 DEFAULT_CITY = "重庆"
-MAX_EMPTY_SCROLL_ROUNDS = 5
+MAX_EMPTY_SCROLL_ROUNDS = 10
 
 # ── JS snippets ────────────────────────────────────
 
@@ -609,6 +609,7 @@ class AutomationEngine:
                             break
                         if self._chat_count >= daily_limit:
                             self._emit("paused", f"达上限 {daily_limit}", on_progress)
+                            self._running = False
                             break
                         sk = _pj.source_key or (_pj.url or "").split("?")[0]
                         if sk in processed:
@@ -1107,7 +1108,13 @@ class AutomationEngine:
                 if isinstance(result, list) and len(result) > 0:
                     return result
                 if attempt < 2:
-                    await bm.evaluate("window.scrollBy({top: 800, behavior: 'smooth'})")
+                    # 空列表：先滚到接近底部再试，跳过已处理区域
+                    await bm.evaluate("""
+                        (() => {
+                            const h = document.scrollingElement || document.documentElement;
+                            h.scrollTop = Math.max(h.scrollTop, h.scrollHeight * 0.7);
+                        })()
+                    """)
                     await asyncio.sleep(2)
             except Exception:
                 pass
