@@ -9,7 +9,7 @@ RUN npm run build
 # ── Stage 2: Production ──
 FROM python:3.11-slim
 LABEL org.opencontainers.image.title="BOSS 直聊助手"
-LABEL org.opencontainers.image.version="1.0.19"
+LABEL org.opencontainers.image.version="1.1.0"
 
 WORKDIR /app
 

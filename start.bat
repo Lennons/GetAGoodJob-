@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title BOSS 直聊助手 v1.0.19
+title BOSS 直聊助手 v1.1.0
 cd /d "%~dp0"
 
 echo ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo   BOSS 直聊助手 v1.0.19
+echo   BOSS 直聊助手 v1.1.0
 echo ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 :: ── Check Python ──

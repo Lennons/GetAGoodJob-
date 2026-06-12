@@ -242,7 +242,7 @@ def health(db: Session = Depends(get_db)) -> dict[str, Any]:
 
 @app.get("/api/version")
 def app_version() -> dict[str, Any]:
-    return {"version": "1.0.18"}
+    return {"version": "1.1.0"}
 
 
 # ── Browser (Playwright) ───────────────────────────
