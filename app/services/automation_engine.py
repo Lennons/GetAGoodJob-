@@ -200,28 +200,25 @@ EXTRACT_JOB_LIST_JS = """
 
 SCROLL_JOB_LIST_JS = """
 (() => {
-  const visible = (el) => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
-  const cards = Array.from(document.querySelectorAll('.job-card-box')).filter(visible);
-  const candidates = [
-    document.querySelector('.job-list-container'),
-    document.querySelector('.recommend-result-job'),
-    document.querySelector('.recommend-result-inner'),
-    document.scrollingElement,
-    document.documentElement,
-    document.body,
-  ].filter(Boolean);
-  for (const el of candidates) {
-    try {
-      const amount = Math.max(el.clientHeight || 0, 900);
-      if (typeof el.scrollBy === 'function') {
-        el.scrollBy({ top: amount, behavior: 'smooth' });
-      } else {
-        el.scrollTop = (el.scrollTop || 0) + amount;
-      }
-    } catch (e) {}
-  }
-  try { window.scrollBy({ top: 900, behavior: 'smooth' }); } catch (e) {}
-  return { cardCount: cards.length, y: window.scrollY };
+  // 找到 BOSS 直聘岗位列表的实际滚动容器并滚到底部
+  const findScrollable = () => {
+    // 优先 BOSS 的岗位列表容器
+    for (const sel of ['.job-list-box', '.job-list-container', '.recommend-result-job', '.recommend-result-inner']) {
+      const el = document.querySelector(sel);
+      if (el && el.scrollHeight > el.clientHeight + 10) return el;
+    }
+    // 回退到页面滚动
+    if (document.scrollingElement && document.scrollingElement.scrollHeight > document.scrollingElement.clientHeight + 10)
+      return document.scrollingElement;
+    return document.documentElement;
+  };
+  const container = findScrollable();
+  const prevCards = document.querySelectorAll('.job-card-box').length;
+  // 直接滚到底部（不是按高度增量，而是 scrollTop = scrollHeight）
+  container.scrollTop = container.scrollHeight;
+  // 再微调以触发懒加载
+  setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
+  return { cardCount: prevCards, scrollTop: container.scrollTop, scrollHeight: container.scrollHeight };
 })()
 """
 
@@ -705,23 +702,42 @@ class AutomationEngine:
 
             while self._running and not stop_all:
                 # Navigate back to list page for next batch (we may be on a detail/chat page)
-                current_list_url = await bm.current_url()
-                if "/web/geek/jobs" not in current_list_url:
-                    list_url = "https://www.zhipin.com/web/geek/jobs"
-                    await bm.navigate(list_url)
-                    await asyncio.sleep(2)
-                    if await self._check_page_risk(bm, stop_on_risk, on_progress):
-                        self._running = False
-                        self._status = "risk"
-                        self._emit("stopped", f"风控停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", on_progress)
-                        stop_all = True
+                nav_ok = False
+                for nav_retry in range(3):
+                    try:
+                        current_list_url = await bm.current_url()
+                        if "/web/geek/jobs" not in current_list_url:
+                            list_url = "https://www.zhipin.com/web/geek/jobs"
+                            await bm.navigate(list_url)
+                            await asyncio.sleep(2)
+                            if await self._check_page_risk(bm, stop_on_risk, on_progress):
+                                self._running = False
+                                self._status = "risk"
+                                self._emit("stopped", f"风控停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", on_progress)
+                                stop_all = True
+                                break
+                        nav_ok = True
                         break
+                    except Exception as e:
+                        self._emit("running", f"导航恢复中({nav_retry+1}/3): {e}", on_progress)
+                        await asyncio.sleep(3)
+                if stop_all:
+                    break
+                if not nav_ok:
+                    self._emit("error", "无法回到列表页，浏览器可能断开", on_progress)
+                    self._stats["errors"] += 1
+                    self._running = False
+                    break
                 if self._chat_count >= daily_limit:
                     self._emit("paused", f"达上限 {daily_limit}", on_progress)
                     break
 
-
-                jobs = await self._extract_jobs(bm)
+                try:
+                    jobs = await self._extract_jobs(bm)
+                except Exception as e:
+                    self._emit("running", f"提取失败，重试中: {e}", on_progress)
+                    await asyncio.sleep(2)
+                    jobs = await self._extract_jobs(bm)
                 fresh_jobs = []
                 for job_card in [j for j in jobs if j.get("url")]:
                     url = job_card["url"]
@@ -1098,11 +1114,20 @@ class AutomationEngine:
         return []
 
     async def _load_more_jobs(self, bm) -> None:
-        try:
-            await bm.evaluate(SCROLL_JOB_LIST_JS)
-        except Exception:
-            pass
-        await asyncio.sleep(4)
+        """滚动岗位列表并等待新卡片加载，最多尝试 5 次。"""
+        for attempt in range(5):
+            try:
+                before = await bm.evaluate("document.querySelectorAll('.job-card-box').length") or 0
+                await bm.evaluate(SCROLL_JOB_LIST_JS)
+                # 等待 BOSS 懒加载新卡片
+                for _ in range(8):
+                    await asyncio.sleep(1)
+                    after = await bm.evaluate("document.querySelectorAll('.job-card-box').length") or 0
+                    if after > before:
+                        return  # 新卡片已出现
+                # 没出现新卡片，再试一次滚动
+            except Exception:
+                await asyncio.sleep(2)
 
     def _search_job_list_js(self, keyword: str) -> str:
         return SEARCH_AND_SUBMIT_JS.replace('"KEYWORD_PLACEHOLDER"', json.dumps(keyword, ensure_ascii=False))
