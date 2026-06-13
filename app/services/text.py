@@ -26,7 +26,9 @@ def clean_jd_text(text: str) -> str:
         "举报", "微信扫码分享", "不合适", "收藏", "立即沟通",
         "去App", "与BOSS随时沟通", "前往App",
         "刚刚活跃", "今日活跃", "本周活跃", "本月活跃", "昨日活跃",
+        "3日内活跃", "2日内活跃", "1日内活跃", "今日回复", "本周回复",
         "在线", "离线",
+        "试试咨询",
         "点击查看地图", "查看更多信息", "展开全文", "收起", "查看地图",
         "用App聊工作，面试机会翻倍", "打开App", "直聊", "立即开聊",
     }
@@ -71,6 +73,9 @@ def clean_jd_text(text: str) -> str:
         "举报", "微信扫码分享", "不合适", "收藏", "立即沟通",
         "去App，与BOSS随时沟通", "与BOSS随时沟通", "前往App，与BOSS随时沟通", "前往App",
         "刚刚活跃", "今日活跃", "本周活跃", "本月活跃", "昨日活跃",
+        "3日内活跃", "2日内活跃", "1日内活跃", "今日回复", "本周回复",
+        "如3日内活跃", "如2日内活跃", "如1日内活跃",
+        "试试咨询", "猎头顾问", "猎头",
     ]
     for junk in sorted(inline_junk, key=len, reverse=True):
         text = text.replace(junk, '')
@@ -94,6 +99,11 @@ def clean_jd_text(text: str) -> str:
         text,
     )
 
+    # Remove orphaned " · " or "· " after junk was stripped
+    text = re.sub(r'\s*[·|]\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*[·|]\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\s+[·|]\s+', ' ', text)
+    
     # Clean up: collapse whitespace
     text = re.sub(r' {2,}', ' ', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
