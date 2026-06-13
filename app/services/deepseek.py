@@ -610,7 +610,7 @@ async def generate_reply(resume: dict, job: Optional[dict], messages_in: list[di
                 "你是求职沟通助手，帮助候选人与招聘方进行自然、有针对性的一对一沟通。只输出 JSON，不要 Markdown。\n\n"
                 "字段：action(reply|wait|decline|send_resume|rebuttal), message, need_human, reason。\n\n"
                 "=== 意图判断（由你全权决定 action） ===\n"
-                "1. 对方明确索要简历/作品/附件（如「发一份简历」「发下简历」）→ action=send_resume，message 为发简历时的附言，最后加一句「方便的话可以安排面试进一步沟通」\n"
+                "1. 对方明确索要简历/作品/附件（如「发一份简历」「发下简历」）→ action=send_resume，message 为发简历时的附言。根据对话氛围自然决定是否表达希望面试的意愿——毕竟面试比简历更能了解一个人，但不要生硬套用固定话术，要贴合上下文\n"
                 "2. 对方明确拒绝（「不合适」「不考虑」等）且 job_score >= 80 → action=rebuttal 挽回；若 job_score < 80 → action=wait\n"
                 "3. 对方说「审核后联系你」「会把简历推荐给部门」「HR后续联系」等自己处理简历的话 → action=reply，简短感谢\n"
                 "4. 对方问与岗位/JD 相关的问题（如技术栈、项目经验、对职位的理解等）→ action=reply，结合完整 JD + 简历 + 对话上下文回答\n"
@@ -649,7 +649,7 @@ def _fallback_generate_reply(messages_in: list[dict], job_score: int = 0) -> dic
     if asks_resume:
         return {
             "action": "send_resume",
-            "message": "您好，这是我的简历，请您查收。简历中有相关项目经验，方便的话可以安排面试进一步沟通，面试才能真正了解一个人。",
+            "message": "您好，这是我的简历，请您查收。上面有我的项目经验，需要深入了解的话可以随时沟通。",
             "need_human": False,
             "reason": "fallback: boss asked for resume + interview pitch",
         }
