@@ -432,7 +432,8 @@ class ReplyMonitor:
 
         conv = [{"role": m["role"], "content": m["content"]} for m in messages]
 
-        # Look up job score
+        # Look up job data (score + full description)
+        job_data = None
         job_score = 0
         try:
             job_url = await bm.evaluate_on(chat_page, EXTRACT_JOB_LINK_JS)
@@ -444,11 +445,12 @@ class ReplyMonitor:
                     data=data, headers={"Content-Type": "application/json"}, method="POST"
                 ), timeout=5).read())
                 job_data = json.loads(resp)
-                job_score = job_data.get("score", 0) if isinstance(job_data, dict) else 0
+                if isinstance(job_data, dict):
+                    job_score = job_data.get("score", 0)
         except Exception:
             pass
 
-        result = await generate_reply(resume, None, conv, settings, job_score=job_score)
+        result = await generate_reply(resume, job_data, conv, settings, job_score=job_score)
 
         action = result.get("action", "")
         text = (result.get("message") or "").strip()

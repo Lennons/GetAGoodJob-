@@ -78,7 +78,9 @@ async def analyze_resume(text: str, *, model: Optional[str] = None, api_key: Opt
             "content": (
                 "你是求职简历分析助手。只输出 JSON，不要输出 Markdown。"
                 "不要编造简历中没有的信息。字段：name,target_roles,years,core_skills,industries,"
-                "highlights,constraints,summary。"
+                "highlights,constraints,summary,project_summary。"
+                "project_summary 是从简历中提取的项目经验摘要（200字以内），涵盖主要项目名称、"
+                "职责、技术栈和成果。不要编造，只提取简历中明确提到的内容。"
             ),
         },
         {"role": "user", "content": f"请分析这份简历：\n{compact_text(text, 16000)}"},
@@ -389,6 +391,8 @@ async def evaluate_job(resume: dict, job: dict, settings: dict) -> dict:
                 "你是严谨的求职岗位匹配助手。只输出 JSON，不要 Markdown。"
                 "字段：score(0-100),decision(chat|skip|review),reasons数组,risks数组,"
                 "best_resume_angle,initial_message。"
+                "评分和开场白必须结合完整的岗位描述（JD）+ 简历分析来综合判断，"
+                "不要只看标题或薪资。"
                 "评分从 6 个维度综合考量：\n"
                 "1. 城市匹配(0-15) 2. 薪资匹配(0-15)\n"
                 "3. 技能覆盖(0-35) 4. 岗位匹配(0-15)\n"
@@ -583,7 +587,6 @@ async def generate_reply(resume: dict, job: Optional[dict], messages_in: list[di
         "resume_analysis": resume,
         "job": job or {},
         "conversation": messages_in[-12:],
-        "job_score": job_score,
         "rules": {
             "do_not_fabricate": True,
             "do_not_share_contact_info_unless_allowed": not settings.get("allow_contact_info_in_messages", False),
@@ -598,23 +601,21 @@ async def generate_reply(resume: dict, job: Optional[dict], messages_in: list[di
                 "你是求职沟通助手，帮助候选人与招聘方进行自然、有针对性的一对一沟通。只输出 JSON，不要 Markdown。\n\n"
                 "字段：action(reply|wait|decline|send_resume|rebuttal), message, need_human, reason。\n\n"
                 "=== 意图判断（由你全权决定 action） ===\n"
-                "1. 对方明确索要简历/作品/附件（如「发一份简历」「发下简历」「简历发我看下」）→ action=send_resume\n"
-                "2. 对方明确拒绝（「不合适」「不考虑」等）且 job_score >= 80 → action=rebuttal 挽回\n"
-                "3. 对方说「审核后联系你」「会把简历推荐给部门」「HR后续联系」「通过后通知你」等自己处理简历的话 → 不是索要简历！action=reply，简短感谢\n"
-                "4. 对方介绍薪资/工时/福利/公司背景/项目等 → action=reply，结合自己对行业和岗位的真实认知来回应\n"
-                "5. 对方问事实类问题 → action=reply，从 resume_analysis 找对应信息诚实回答\n"
-                "6. 对方问看法/想法类问题 → action=reply，用自己的专业判断回答\n"
-                "7. 闲聊/寒暄 → action=reply，自然友好\n"
+                "1. 对方明确索要简历/作品/附件（如「发一份简历」「发下简历」）→ action=send_resume\n"
+                "2. 对方明确拒绝（「不合适」「不考虑」等）→ action=rebuttal 挽回\n"
+                "3. 对方说「审核后联系你」「会把简历推荐给部门」「HR后续联系」等自己处理简历的话 → action=reply，简短感谢\n"
+                "4. 对方问与岗位/JD 相关的问题（如技术栈、项目经验、对职位的理解等）→ action=reply，结合完整 JD + 简历 + 对话上下文回答\n"
+                "5. 对方介绍薪资/工时/福利/公司背景/项目等 → action=reply，结合自己对行业和岗位的认知来回应\n"
+                "6. 对方问事实类问题 → action=reply，从简历找对应信息诚实回答，简历没有则诚实说不知道\n"
+                "7. 闲聊/寒暄/日常问候 → action=reply，自然友好简短\n"
                 "8. 系统消息/自动回复 → action=wait\n\n"
                 "=== 回复原则 ===\n"
-                "- 每个回复都要看对方说了什么，结合 context（简历、岗位、对话）给出有针对性的回答\n"
-                "- 介绍薪资待遇时 → 简短确认收到，可结合自己对市场行情的认知（「这个范围和市场水平差不多」「了解了，感谢具体介绍」），不评价高低\n"
-                "- 介绍公司背景时 → 如有了解可说一两句，没了解也可以说听起来不错\n"
-                "- 介绍上班时间时 → 简短确认，可以说「作息挺合理的」之类自然的评价\n"
+                "- 对方问 JD 相关内容时：必须仔细阅读 job.description，结合简历中的 skills 和 project_summary 来回答，展示专业度和对岗位的理解\n"
+                "- 对方闲聊时：简短自然回应，不用强行扯到 JD，保持友好\n"
                 "- 简历有的信息善用；简历没的信息诚实说不知道\n"
                 "- 语气真诚自然，像真人在聊天，不死板不模板化\n"
                 "- 不要以「您好，我叫XXX」开场\n"
-                "- message 控制在 30-120 字\n\n"
+                "- message 控制在 30-160 字\n\n"
                 "=== 敏感内容 ===\n"
                 "涉及入职时间、证件、隐私、线下面试、收费等 → need_human=true"
             ),
