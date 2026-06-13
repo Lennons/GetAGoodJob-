@@ -164,22 +164,6 @@ def _mark_evaluation_skipped(evaluation: Optional[dict], reason: str) -> dict:
     return result
 
 
-EXTRACT_DETAIL_SALARY_JS = """
-(() => {
-  // 尝试从详情页提取可读薪资
-  const el = document.querySelector('.job-salary, .salary-text, [class*="salary"], .detail-salary');
-  if (!el) return '';
-  const text = (el.textContent || '').trim();
-  // 检查是否有 data-salary 属性
-  const ds = el.getAttribute('data-salary') || el.getAttribute('data-range');
-  if (ds) return ds;
-  // 检查 meta 标签
-  const meta = document.querySelector('meta[name="salary"], meta[property="og:salary"]');
-  if (meta) return meta.getAttribute('content') || '';
-  return text;
-})()
-"""
-
 EXTRACT_JOB_LIST_JS = """
 (() => {
   const visible = (el) => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
@@ -210,7 +194,27 @@ EXTRACT_JOB_LIST_JS = """
       raw: { card_text: text, tags }
     });
   }
-  return jobs;
+  // 提取 BOSS 薪资字体 URL
+  var fontUrl = '';
+  try {
+    for (var si = 0; si < document.styleSheets.length; si++) {
+      try {
+        var rules = document.styleSheets[si].cssRules;
+        for (var ri = 0; ri < rules.length; ri++) {
+          var rule = rules[ri];
+          if (rule instanceof CSSFontFaceRule) {
+            var src = rule.style.getPropertyValue('src');
+            if (src && (src.indexOf('BOSS') > -1 || src.indexOf('boss') > -1)) {
+              var m = src.match(/url\(["\']?([^"\')\)]+)["\']?\)/);
+              if (m) { fontUrl = m[1]; break; }
+            }
+          }
+        }
+      } catch(e) {}
+      if (fontUrl) break;
+    }
+  } catch(e) {}
+  return {jobs: jobs, font_url: fontUrl};
 })()
 """
 
@@ -980,7 +984,7 @@ class AutomationEngine:
         else:
             await self._random_delay(600, 1800)
             try:
-                eval_result = await evaluate_job(resume, job_card, settings, self._boss_font_url)
+                eval_result = await evaluate_job(resume, job_card, settings)
             except Exception as e:
                 await self._record_job_result(job_card, {
                     "score": 0, "decision": "review",
@@ -1038,20 +1042,6 @@ class AutomationEngine:
                 self._stats["skipped"] += 1
                 await bm.close_tab(detail_page)
                 return f"[{idx+1}] 未进入详情页 | {title}"
-
-            # 详情页额外薪资提取（兜底 BOSS 字体混淆）
-            try:
-                detail_salary = await bm.evaluate_on(detail_page, EXTRACT_DETAIL_SALARY_JS)
-                if detail_salary and not eval_result.get("salary_display"):
-                    from app.services.deepseek import _normalize_salary, _decode_boss_salary
-                    ds = _normalize_salary(str(detail_salary))
-                    if not re.search(r'\d', ds) and self._boss_font_url:
-                        ds = _decode_boss_salary(str(detail_salary), self._boss_font_url)
-                    if ds and re.search(r'\d', ds):
-                        eval_result["salary_display"] = ds
-                        await self._record_job_result(job_card, eval_result, batch_id)
-            except Exception:
-                pass
 
             # Step 3: Click "立即沟通" (first click — opens dialog, button changes to "继续沟通")
             btn1 = await bm.evaluate_on(detail_page, """(() => {
@@ -1163,17 +1153,61 @@ class AutomationEngine:
 
     async def _extract_jobs(self, bm) -> list[dict]:
         await asyncio.sleep(3)
+        result = None
         for attempt in range(3):
             try:
-                result = await bm.evaluate(EXTRACT_JOB_LIST_JS)
-                if isinstance(result, list) and len(result) > 0:
-                    return result
+                raw = await bm.evaluate(EXTRACT_JOB_LIST_JS)
+                if isinstance(raw, dict):
+                    result = raw
+                    break
+                if isinstance(raw, list) and len(raw) > 0:
+                    result = {"jobs": raw, "font_url": ""}
+                    break
                 if attempt < 2:
                     await bm.evaluate(SCROLL_JOB_LIST_JS)
                     await asyncio.sleep(3)
             except Exception:
                 pass
-        return []
+        if not result or not result.get("jobs"):
+            return []
+
+        # 字体解码
+        jobs = result["jobs"]
+        font_url = result.get("font_url", "")
+        if font_url:
+            self._ensure_boss_font_decoder(font_url)
+        if self._boss_decode_map:
+            for j in jobs:
+                raw_salary = j.get("salary", "")
+                decoded = ''.join(self._boss_decode_map.get(ch, ch) for ch in str(raw_salary))
+                if decoded != raw_salary:
+                    j["salary"] = decoded
+        return jobs
+
+    def _ensure_boss_font_decoder(self, font_url: str):
+        """下载 BOSS 字体文件并缓存 PUA→数字 解码表"""
+        if self._boss_decode_map is not None:
+            return
+        try:
+            from fontTools.ttLib import TTFont
+            from io import BytesIO
+            req = urllib.request.Request(font_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                font_data = resp.read()
+            font = TTFont(BytesIO(font_data))
+            cmap = font.getBestCmap()
+            if not cmap:
+                self._boss_decode_map = {}
+                return
+            pua_pairs = sorted((cp, gn) for cp, gn in cmap.items() if 0xE000 <= cp <= 0xF8FF)
+            decode_map = {}
+            for idx, (cp, gn) in enumerate(pua_pairs):
+                decode_map[chr(cp)] = str(idx % 10)
+            self._boss_decode_map = decode_map
+            logging.getLogger(__name__).info(f"BOSS字体解码表已加载: {len(decode_map)} 个PUA字符, URL={font_url}")
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"BOSS字体解码失败: {e}")
+            self._boss_decode_map = {}
 
     async def _load_more_jobs(self, bm) -> None:
         """滚动岗位列表并等待新卡片加载，最多尝试 5 次。"""

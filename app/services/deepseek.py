@@ -88,19 +88,24 @@ async def analyze_resume(text: str, *, model: Optional[str] = None, api_key: Opt
 
 
 def _normalize_salary(raw: str) -> str:
-    """统一薪资单位：15k→15000, 7~12K→7000~12000, 15000~20000 保持不变."""
+    """统一薪资单位：13K-26K·13薪 → 13000-26000·13薪, 15k→15000."""
     if not raw:
         return ""
-    # 去掉 k/K 标记
-    cleaned = re.sub(r'[kK]', '', raw)
+    # 分离薪资区间和后缀（如 ·13薪）
+    main = raw
+    suffix = ""
+    m_sep = re.match(r'^(.*?)([·/]\s*.*)$', raw)
+    if m_sep:
+        main = m_sep.group(1)
+        suffix = m_sep.group(2)
+    has_k = bool(re.search(r'\d+\s*[kK]', main))
+    cleaned = re.sub(r'[kK]', '', main)
     nums = [int(n) for n in re.findall(r'\d+', cleaned)]
     if not nums:
         return raw
-    has_k = bool(re.search(r'\d+\s*[kK]', raw))
-    # 有 k/K 标记且数字均 < 1000，视为千单位整体乘1000
     if has_k and max(nums) < 1000:
-        return re.sub(r'(\d+)', lambda m: str(int(m.group(1)) * 1000), cleaned)
-    return cleaned
+        cleaned = re.sub(r'(\d+)', lambda m: str(int(m.group(1)) * 1000), cleaned)
+    return cleaned + suffix
 
 
 def _score_salary(job_salary: str, expected: str, ratio: float = 0.7) -> int:
@@ -134,54 +139,6 @@ def _score_salary(job_salary: str, expected: str, ratio: float = 0.7) -> int:
         return 5
     return 12
 
-
-def _extract_job_salary_from_reason(reason: str) -> str:
-    """从AI理由中提取岗位薪资数字，返回如 '13K-15K' 或 ''."""
-    m = re.search(r'岗位薪资[^\d]*(\d+)\s*[kK]?\s*[-~]\s*(\d+)\s*[kK]?', reason)
-    if m:
-        return f"{m.group(1)}K-{m.group(2)}K"
-    m = re.search(r'(?:薪资范围|薪资上限|岗位)\D*(\d+)\s*[kK]?\s*[-~]\s*(\d+)\s*[kK]?', reason)
-    if m:
-        return f"{m.group(1)}K-{m.group(2)}K"
-    m = re.search(r'(?:上限|最高|岗位)\D*(\d+)\s*[kK]', reason)
-    if m:
-        return f"{m.group(1)}K"
-    return ""
-
-def _decode_boss_salary(raw: str, font_url: str) -> str:
-    """下载 BOSS 字体文件，解析 cmap 表，解码混淆薪资。返回如 '13K-26K·13薪' 或 ''"""
-    if not raw or not font_url:
-        return ""
-    try:
-        from fontTools.ttLib import TTFont
-        req = urllib.request.Request(font_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            font_data = resp.read()
-        font = TTFont(BytesIO(font_data))
-        cmap = font.getBestCmap()
-        if not cmap:
-            return ""
-        # cmap: {codepoint: glyph_name}
-        # BOSS: PUA codepoints map to glyph names like 'glyph1'..'glyph10'
-        # 按 codepoint 从小到大排序，依次对应数字 0-9
-        pua_pairs = sorted((cp, gn) for cp, gn in cmap.items() if 0xE000 <= cp <= 0xF8FF)
-        if not pua_pairs:
-            return ""
-        # 构建解码表：chr(PUA_codepoint) → digit_char
-        decode_map = {}
-        for idx, (cp, gn) in enumerate(pua_pairs):
-            decode_map[chr(cp)] = str(idx % 10)
-        # 解码
-        result = []
-        for ch in raw:
-            result.append(decode_map.get(ch, ch))
-        decoded = ''.join(result)
-        # 验证：解码后应包含数字
-        if re.search(r'\d', decoded):
-            return decoded
-        return ""
-    except Exception:
-        return ""
 
 
 def _apply_salary_penalty(evaluation: dict, job: dict, settings: dict, font_url: str = "") -> dict:
@@ -277,7 +234,7 @@ def _score_experience(job_text: str, resume_years: int, extra_years=None) -> int
 
 
 
-def fallback_evaluate_job(resume: dict, job: dict, settings: dict, font_url: str = "") -> dict:
+def fallback_evaluate_job(resume: dict, job: dict, settings: dict) -> dict:
     text = " ".join([
         str(job.get("title", "")),
         str(job.get("company", "")),
@@ -388,7 +345,7 @@ def fallback_evaluate_job(resume: dict, job: dict, settings: dict, font_url: str
         "best_resume_angle": resume.get("summary", "")[:140],
         "score_detail": _score_detail,
         "initial_message": build_fallback_initial_message(resume, job) if decision == "chat" else "",
-    }, job, settings, font_url)
+    }, job, settings)
 
 
 def build_fallback_initial_message(resume: dict, job: dict) -> str:
@@ -399,7 +356,7 @@ def build_fallback_initial_message(resume: dict, job: dict) -> str:
     return f"您好，我对{title}很感兴趣，想进一步了解岗位职责和团队情况，方便的话期待沟通。"
 
 
-async def evaluate_job(resume: dict, job: dict, settings: dict, font_url: str = "") -> dict:
+async def evaluate_job(resume: dict, job: dict, settings: dict) -> dict:
     client = DeepSeekClient(api_key=settings.get("api_key"), model=settings.get("model"))
     if not client.configured:
         return fallback_evaluate_job(resume, job, settings)
@@ -420,7 +377,7 @@ async def evaluate_job(resume: dict, job: dict, settings: dict, font_url: str = 
             "role": "system",
             "content": (
                 "你是严谨的求职岗位匹配助手。只输出 JSON，不要 Markdown。"
-                "字段：score(0-100),decision(chat|skip|review),reasons数组,risks数组,job_salary(岗位薪资原文),"
+                "字段：score(0-100),decision(chat|skip|review),reasons数组,risks数组,"
                 "best_resume_angle,initial_message。"
                 "评分从 6 个维度综合考量：\n"
                 "1. 城市匹配(0-15) 2. 薪资匹配(0-15)\n"
@@ -441,7 +398,7 @@ async def evaluate_job(resume: dict, job: dict, settings: dict, font_url: str = 
         {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
     ]
     result = await client.chat_json(messages, max_tokens=1200)
-    return _apply_salary_penalty(result, job, settings, font_url)
+    return _apply_salary_penalty(result, job, settings)
 
 
 async def evaluate_and_extract_keywords(resume: dict, job: dict, settings: dict) -> dict:
@@ -472,7 +429,7 @@ async def evaluate_and_extract_keywords(resume: dict, job: dict, settings: dict)
             "content": (
                 "你是一位严谨的求职岗位匹配兼 JD 分析助手。只输出 JSON，不要 Markdown。\n\n"
                 "返回字段：\n"
-                "score(0-100), decision(chat|skip|review), reasons 数组, risks 数组, job_salary(岗位薪资原文), "
+                "score(0-100), decision(chat|skip|review), reasons 数组, risks 数组, "
                 "best_resume_angle, initial_message,\n"
                 "keywords 数组（每个词含 word 和 category，category 为 skill|tool|knowledge 之一）。\n\n"
                 "===== 评分规则（每条理由须具体描述差异，禁止笼统标签）=====\n"
