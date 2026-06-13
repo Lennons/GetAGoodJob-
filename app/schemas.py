@@ -57,6 +57,7 @@ class SettingsPatch(BaseModel):
     filter_city: Optional[str] = None
     target_job_keyword: Optional[str] = None
     salary_expectation: Optional[str] = None
+    salary_intercept_ratio: Optional[float] = None
     blocked_companies: Optional[list[str]] = None
     blocked_keywords: Optional[list[str]] = None
 

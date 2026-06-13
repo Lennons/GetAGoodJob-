@@ -87,6 +87,7 @@ export default function SettingsPage() {
               </Field>
               <Field label="每日沟通上限"><input className="field-input" type="number" min={1} max={500} value={s.daily_chat_limit} onChange={e => update("daily_chat_limit", Number(e.target.value))} /></Field>
               <Field label="期望薪资"><input className="field-input" placeholder="例：15k-25k 或 15000-25000" value={(s.salary_expectation as string) || ''} onChange={e => setS(prev => ({ ...prev, salary_expectation: e.target.value }))} /></Field>
+              <Field label="薪资拦截系数"><input className="field-input" type="number" min={0.1} max={2.0} step={0.05} value={(s.salary_intercept_ratio as number) ?? 0.7} onChange={e => setS(prev => ({ ...prev, salary_intercept_ratio: parseFloat(e.target.value) || 0.7 } as any))} /></Field>
               <Field label="最低开聊分数线"><input className="field-input" type="number" min={0} max={100} value={s.min_score_to_chat} onChange={e => update("min_score_to_chat", Number(e.target.value))} /></Field>
               <Field label="最短发送间隔 (ms)"><input className="field-input" type="number" min={3000} step={1000} value={s.cooldown_min_ms} onChange={e => update("cooldown_min_ms", Number(e.target.value))} /></Field>
               <Field label="最长发送间隔 (ms)"><input className="field-input" type="number" min={5000} step={1000} value={s.cooldown_max_ms} onChange={e => update("cooldown_max_ms", Number(e.target.value))} /></Field>

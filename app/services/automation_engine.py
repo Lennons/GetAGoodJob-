@@ -793,13 +793,19 @@ class AutomationEngine:
                 # Track batch total for progress denominator
                 self._stats["total"] += len(fresh_jobs)
 
+                batch_total = len(fresh_jobs)
+                completed_in_batch = 0
                 for job_card in fresh_jobs:
                     if not self._running:
                         stop_all = True
+                        self._emit("running", f"[DEBUG] 批次中断：running=False，已处理{completed_in_batch}/{batch_total}，剩余{batch_total-completed_in_batch}个不计入total", on_progress)
+                        self._stats["total"] -= (batch_total - completed_in_batch)
                         break
                     if self._chat_count >= daily_limit:
                         self._emit("paused", f"达上限 {daily_limit}", on_progress)
                         stop_all = True
+                        self._emit("running", f"[DEBUG] 批次中断：达上限，已处理{completed_in_batch}/{batch_total}，剩余{batch_total-completed_in_batch}个不计入total", on_progress)
+                        self._stats["total"] -= (batch_total - completed_in_batch)
                         break
 
                     url = job_card["url"]
@@ -810,12 +816,8 @@ class AutomationEngine:
                         self._running = False
                         self._status = "risk"
                         self._emit("stopped", f"风控停止 — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}", on_progress)
-                        await self._record_job_result(
-                            job_card,
-                            {"score": 0, "decision": "skip", "status": "error",
-                             "reasons": ["检测到风控，停止处理"], "risks": ["风控中止"], "initial_message": ""},
-                            batch_id,
-                        )
+                        self._stats["total"] -= (batch_total - completed_in_batch - 1)
+                        self._emit("running", f"[DEBUG] 批次中断：风控，已处理{completed_in_batch}/{batch_total}，剩余{batch_total-completed_in_batch-1}个不计入total", on_progress)
                         stop_all = True
                         break
 
@@ -849,8 +851,12 @@ class AutomationEngine:
                         )
                         self._emit("running", f"[{idx+1}] 异常: {exc}", on_progress)
 
+                    completed_in_batch += 1
+
                     if not self._running:
                         stop_all = True
+                        self._emit("running", f"[DEBUG] 批次中断：running=False(处理后)，已处理{completed_in_batch}/{batch_total}，剩余{batch_total-completed_in_batch}个不计入total", on_progress)
+                        self._stats["total"] -= (batch_total - completed_in_batch)
                         break
 
                     if await self._check_page_risk(bm, stop_on_risk, on_progress):
@@ -878,14 +884,20 @@ class AutomationEngine:
 
             # 根据退出原因选择正确的结束状态
             exit_reason = "empty"  # default: 岗位已穷尽
-            if self._chat_count >= daily_limit:
+            if self._status == "risk":
+                exit_reason = "risk"
+            elif self._chat_count >= daily_limit:
                 exit_reason = "daily_limit"
+            self._emit("running", f"[DEBUG] exit_reason={exit_reason}, _running={self._running}, _status={self._status}, stop_all={stop_all}, total={self._stats.get('total',0)}, sent={self._stats.get('sent',0)}, skipped={self._stats.get('skipped',0)}, errors={self._stats.get('errors',0)}", on_progress)
             if exit_reason == "empty":
                 msg = f"完成 — 发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}"
                 self._emit("completed", msg, on_progress)
             elif exit_reason == "daily_limit":
                 msg = f"达投递上限 {daily_limit} — 已发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}"
                 self._emit("paused", msg, on_progress)
+            elif exit_reason == "risk":
+                msg = f"风控/登录失效停止 — 发送 {self._stats['sent']}，跳过 {self._stats['skipped']}，错误 {self._stats['errors']}"
+                self._emit("stopped", msg, on_progress)
             return self._result(True, msg)
         except Exception as exc:
             self._emit("error", str(exc), on_progress)

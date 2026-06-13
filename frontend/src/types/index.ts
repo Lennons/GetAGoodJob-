@@ -7,6 +7,7 @@ export interface Resume {
     experience_years?: number;
     current_role?: string;
     salary_expectation?: string;
+    salary_intercept_ratio?: number;
     core_skills?: string[];
     summary?: string;
   } | null;

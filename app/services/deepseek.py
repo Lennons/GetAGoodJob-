@@ -87,8 +87,8 @@ async def analyze_resume(text: str, *, model: Optional[str] = None, api_key: Opt
 
 
 
-def _score_salary(job_salary: str, expected: str) -> int:
-    """Score salary match — returns negative penalty when gap >= 30% of expected."""
+def _score_salary(job_salary: str, expected: str, ratio: float = 0.7) -> int:
+    """Score salary match — returns negative penalty when job_max < exp_min * ratio."""
     if not expected or not job_salary:
         return 8  # no data, neutral
 
@@ -103,26 +103,27 @@ def _score_salary(job_salary: str, expected: str) -> int:
     job_min = min(job_nums)
     job_max = max(job_nums)
 
-    # 岗位最低薪资低于期望最低的70% → 直接跳过
-    if job_min < exp_min * 0.7:
+    # 岗位最高薪资 < 期望最低 × ratio → 直接跳过
+    if job_max < exp_min * ratio:
         return -100
     # 有区间重叠 → 满分
     if job_min <= exp_max and job_max >= exp_min:
         return 15
-    # 岗位最低 ≥ 期望最低×0.7 但有差距 → 降分但不跳过
+    # 岗位最高 ≥ 期望最低×ratio 但最低 < 期望最低 → 降分
     if job_min < exp_min:
         return 5
     return 12
 
 
 def _apply_salary_penalty(evaluation: dict, job: dict, settings: dict) -> dict:
-    """Post-process: if job min salary < 70% of expected min, force skip."""
+    """Post-process: if job_max < exp_min * ratio, force skip."""
     salary_expectation = settings.get("salary_expectation", "") or ""
     if not salary_expectation:
         return evaluation
 
+    ratio = float(settings.get("salary_intercept_ratio", 0.7))
     job_salary = str(job.get("salary", ""))
-    salary_score = _score_salary(job_salary, salary_expectation)
+    salary_score = _score_salary(job_salary, salary_expectation, ratio)
 
     # BOSS 字体混淆：salary 字段里的数字被替换成私有区 Unicode，\d+ 匹配不到。
     # 如果直接解析失败（得分 8 表示无数据），从 AI 评分理由里兜底提取薪资数字。
@@ -131,14 +132,14 @@ def _apply_salary_penalty(evaluation: dict, job: dict, settings: dict) -> dict:
             m = re.search(r'(?:薪资范围|岗位薪资|薪资)[^\d]*(\d+)[kK]?[-~](\d+)[kK]?', reason)
             if m:
                 job_salary = f"{m.group(1)}-{m.group(2)}K"
-                salary_score = _score_salary(job_salary, salary_expectation)
+                salary_score = _score_salary(job_salary, salary_expectation, ratio)
                 break
 
     if salary_score < 0:
         evaluation["score"] = 0
         evaluation["decision"] = "skip"
         reasons = list(evaluation.get("reasons", []))
-        reasons.append(f"薪资硬拦截：岗位{job_salary}，期望{salary_expectation}，差距过大直接跳过")
+        reasons.append(f"薪资硬拦截：岗位{job_salary}，期望{salary_expectation}×{ratio}，差距过大直接跳过")
         evaluation["reasons"] = reasons
     return evaluation
 
@@ -221,7 +222,8 @@ def fallback_evaluate_job(resume: dict, job: dict, settings: dict) -> dict:
 
     # ── Dimension 2: Salary match (0-15) ──────────────
     salary_expectation = settings.get("salary_expectation", "") or resume.get("salary_expectation", "")
-    salary_score = _score_salary(salary, salary_expectation)
+    salary_ratio = float(settings.get("salary_intercept_ratio", 0.7))
+    salary_score = _score_salary(salary, salary_expectation, salary_ratio)
 
     # ── Dimension 3: Skill overlap (0-35) ─────────────
     skill_score = min(len(skill_hits) * 7, 35)

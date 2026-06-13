@@ -37,6 +37,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "filter_city": "重庆",
     "target_job_keyword": "产品经理",
     "salary_expectation": "",
+    "salary_intercept_ratio": 0.7,
     "blocked_companies": [],
     "blocked_keywords": ["培训贷", "收费", "押金", "加盟", "纯销售", "电话销售"],
 }
