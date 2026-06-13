@@ -1,2 +1,3 @@
-2026/06/13-15:31:02.916 83ca40 Creating DB /Users/a1-6/Documents/工作通/chrome_data/Default/Site Characteristics Database since it was missing.
-2026/06/13-15:31:02.923 83ca40 Reusing MANIFEST /Users/a1-6/Documents/工作通/chrome_data/Default/Site Characteristics Database/MANIFEST-000001
+2026/06/13-15:34:04.804 83e632 Reusing MANIFEST /Users/a1-6/Documents/工作通/chrome_data/Default/Site Characteristics Database/MANIFEST-000001
+2026/06/13-15:34:04.804 83e632 Recovering log #3
+2026/06/13-15:34:04.804 83e632 Reusing old log /Users/a1-6/Documents/工作通/chrome_data/Default/Site Characteristics Database/000003.log 

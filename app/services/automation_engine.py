@@ -1174,8 +1174,7 @@ class AutomationEngine:
         # 字体解码
         jobs = result["jobs"]
         font_url = result.get("font_url", "")
-        if font_url:
-            self._ensure_boss_font_decoder(font_url)
+        self._ensure_boss_font_decoder(font_url)
         if self._boss_decode_map:
             for j in jobs:
                 raw_salary = j.get("salary", "")
@@ -1184,14 +1183,18 @@ class AutomationEngine:
                     j["salary"] = decoded
         return jobs
 
+    # 已知的 BOSS 字体 URL（作为运行时 CSS 提取失败时的兜底）
+    _KNOWN_BOSS_FONT_URL = "https://img.bosszhipin.com/static/file/2023/30k9dfumyv1693967587404.ttf"
+
     def _ensure_boss_font_decoder(self, font_url: str):
         """下载 BOSS 字体文件并缓存 PUA→数字 解码表"""
         if self._boss_decode_map is not None:
             return
+        url = font_url or self._KNOWN_BOSS_FONT_URL
         try:
             from fontTools.ttLib import TTFont
             from io import BytesIO
-            req = urllib.request.Request(font_url, headers={"User-Agent": "Mozilla/5.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 font_data = resp.read()
             font = TTFont(BytesIO(font_data))

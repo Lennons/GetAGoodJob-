@@ -1,2 +1,3 @@
-2026/06/13-15:31:02.958 83ca94 Creating DB /Users/a1-6/Documents/工作通/chrome_data/Default/Local Storage/leveldb since it was missing.
-2026/06/13-15:31:02.965 83ca94 Reusing MANIFEST /Users/a1-6/Documents/工作通/chrome_data/Default/Local Storage/leveldb/MANIFEST-000001
+2026/06/13-15:34:04.845 83e680 Reusing MANIFEST /Users/a1-6/Documents/工作通/chrome_data/Default/Local Storage/leveldb/MANIFEST-000001
+2026/06/13-15:34:04.848 83e680 Recovering log #3
+2026/06/13-15:34:04.849 83e680 Reusing old log /Users/a1-6/Documents/工作通/chrome_data/Default/Local Storage/leveldb/000003.log 

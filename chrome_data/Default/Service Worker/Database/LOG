@@ -1,2 +1,3 @@
-2026/06/13-15:31:03.281 83ca3d Creating DB /Users/a1-6/Documents/工作通/chrome_data/Default/Service Worker/Database since it was missing.
-2026/06/13-15:31:03.284 83ca3d Reusing MANIFEST /Users/a1-6/Documents/工作通/chrome_data/Default/Service Worker/Database/MANIFEST-000001
+2026/06/13-15:34:04.780 83e63c Reusing MANIFEST /Users/a1-6/Documents/工作通/chrome_data/Default/Service Worker/Database/MANIFEST-000001
+2026/06/13-15:34:04.797 83e63c Recovering log #3
+2026/06/13-15:34:04.797 83e63c Reusing old log /Users/a1-6/Documents/工作通/chrome_data/Default/Service Worker/Database/000003.log 
