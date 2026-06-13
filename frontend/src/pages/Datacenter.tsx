@@ -35,11 +35,11 @@ export default function Datacenter() {
 
   const loadHotwords = async () => {
     try {
-      let kw = await api.getKeywords(20);
+      let kw = await api.getKeywords(100);
       if (!kw?.length && !inited.current) {
         inited.current = true;
         setAnalyzing(true);
-        try { await api.analyzeKeywords(); kw = await api.getKeywords(20); } catch { kw = []; }
+        try { await api.analyzeKeywords(); kw = await api.getKeywords(100); } catch { kw = []; }
         setAnalyzing(false);
       }
       inited.current = true;

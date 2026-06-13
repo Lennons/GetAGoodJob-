@@ -49,7 +49,7 @@ export const api = {
   deleteErrorJobs: () => request<{ deleted: number }>("/api/jobs/errors", { method: "DELETE" }),
 
   // Keywords
-  getKeywords: (limit = 20) => request<Hotword[]>(`/api/jobs/keywords?limit=${limit}`),
+  getKeywords: (limit = 100) => request<Hotword[]>(`/api/jobs/keywords?limit=${limit}`),
   analyzeKeywords: () => request<{ ok: boolean }>("/api/jobs/keywords/analyze", { method: "POST" }),
 
   // Browser

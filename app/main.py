@@ -750,7 +750,7 @@ def lookup_job(payload: dict, db: Session = Depends(get_db)) -> dict[str, Any]:
     return job_to_dict(job)
 
 @app.get("/api/jobs/keywords")
-def job_keywords(limit: int = 30, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+def job_keywords(limit: int = 100, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     """Return hot keywords aggregated from the job_keywords table."""
     from app.models import JobKeyword
 
@@ -784,13 +784,38 @@ def job_keywords(limit: int = 30, db: Session = Depends(get_db)) -> list[dict[st
 
 
 @app.post("/api/jobs/keywords/analyze")
-async def analyze_job_keywords(db: Session = Depends(get_db)):
-    """Trigger keyword extraction for all analysable jobs."""
-    from app.models import JobKeyword
+async def analyze_job_keywords(
+    force: bool = False,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+):
+    """Trigger keyword extraction for qualifying jobs (score >= min_score_to_chat).
+    
+    Args:
+        force: If True, delete old keywords and re-analyze all qualifying jobs.
+    """
+    from app.models import Job, JobKeyword
     from app.services.deepseek import extract_job_keywords
     from app.services.settings import get_app_settings
 
     settings = get_app_settings(db)
+    min_score = int(settings.get("min_score_to_chat", 72))
+
+    if force:
+        from sqlalchemy import text as _text
+        deleted = db.execute(_text("DELETE FROM job_keywords")).rowcount
+        db.commit()
+        total_jobs = db.scalar(select(func.count()).select_from(Job).where(
+            Job.description != None,
+            Job.description != "",
+            Job.score >= min_score,
+        )) or 0
+        background_tasks.add_task(_run_keyword_analysis, dict(settings), min_score, total_jobs)
+        return {
+            "analyzed": 0,
+            "keywords_added": 0,
+            "message": f"已清除 {deleted} 条旧热词，正在后台重分析 {total_jobs} 个达标岗位（score≥{min_score}）...",
+        }
 
     # Find jobs that have descriptions but haven't been analyzed yet
     from sqlalchemy import text as _text
@@ -799,16 +824,18 @@ async def analyze_job_keywords(db: Session = Depends(get_db)):
     )).fetchall()
     analyzed_ids = {r[0] for r in existing}
 
-    jobs = db.scalars(
-        select(Job).where(
-            Job.description != None,
-            Job.description != "",
-            Job.id.notin_(analyzed_ids) if analyzed_ids else True,
-        )
-    ).all()
+    base_where = select(Job).where(
+        Job.description != None,
+        Job.description != "",
+        Job.score >= min_score,
+    )
+    if analyzed_ids:
+        base_where = base_where.where(Job.id.notin_(analyzed_ids))
+
+    jobs = db.scalars(base_where).all()
 
     if not jobs:
-        return {"analyzed": 0, "keywords_added": 0, "message": "所有岗位已分析完毕"}
+        return {"analyzed": 0, "keywords_added": 0, "message": "所有达标岗位已分析完毕"}
 
     total_added = 0
     for job in jobs:
@@ -832,6 +859,53 @@ async def analyze_job_keywords(db: Session = Depends(get_db)):
         "analyzed": len(jobs),
         "keywords_added": total_added,
     }
+
+
+async def _run_keyword_analysis(settings_values: dict, min_score: int, total: int):
+    """Background task: analyze qualifying jobs (score >= min_score)."""
+    import logging
+    logger = logging.getLogger("keyword_analysis")
+    from app.database import SessionLocal
+    from app.models import Job, JobKeyword
+    from app.services.deepseek import extract_job_keywords
+    
+    db = SessionLocal()
+    try:
+        jobs = db.scalars(
+            select(Job).where(
+                Job.description != None,
+                Job.description != "",
+                Job.score >= min_score,
+            )
+        ).all()
+        
+        done = 0
+        for job in jobs:
+            try:
+                text = job.description or ""
+                if not text:
+                    continue
+                keywords = await extract_job_keywords(text, settings_values)
+                for kw in keywords:
+                    db.add(JobKeyword(
+                        job_id=job.id,
+                        word=kw.get("word", ""),
+                        category=kw.get("category", "skill"),
+                    ))
+                done += 1
+                if done % 10 == 0:
+                    db.commit()
+                    logger.info(f"关键词分析进度: {done}/{total}")
+            except Exception:
+                continue
+        
+        db.commit()
+        logger.info(f"关键词分析完成: {done} 个岗位")
+    except Exception as e:
+        logger.error(f"关键词分析异常: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 @app.post("/api/jobs/keywords/extract/{job_id}")
